@@ -2,3 +2,5 @@ assets
 pdf
 output
 !src/assets
+**/*cache*
+test*

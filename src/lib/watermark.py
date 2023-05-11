@@ -1,8 +1,10 @@
 # adapted from: https://github.com/2Dou/watermarker/blob/master/marker.py
+import numpy as np
+import matplotlib.pyplot as plt
 import math
 from pathlib import Path
 from PIL import Image, ImageFont, ImageDraw, ImageEnhance, ImageChops, ImageOps
-
+import fitz
 
 def set_opacity(im, opacity):
     '''
@@ -34,8 +36,8 @@ def gen_mark(
     angle           : int = 30,
     color           : str = "#808080",
     opacity         : float=0.15,
+    font_family     : str = "src/assets/SIMKAI.TTF",
     font_height_crop: str="1.2",
-    font_family     : str = "src/assets/SIMKAI.TTF"
     ): 
     """生成水印图片，返回添加水印的函数
 
@@ -113,16 +115,38 @@ def gen_mark(
     return mark_im
 
 
-def add_mark(img_path, mark_func, quality: int = 80, output_path: str = None):
+def add_mark_to_image(img_path, mark_text: str, quality: int = 80, output_path: str = None, **mark_args):
     im = Image.open(img_path)
     im = ImageOps.exif_transpose(im)
-
+    mark_func = gen_mark(mark_text, **mark_args)
     image = mark_func(im)
     if output_path is None:
         p = Path(img_path)
         output_path = p.parent / f"{p.stem}-watermarked{p.suffix}"
     image.save(output_path, quality=quality)
 
-if __name__ == "__main__":
-    mark_func = gen_mark("绝版", size=50)
-    add_mark("/home/likai/code/pdf_tocgen/assets/test.png", mark_func)
+def add_mark_to_pdf(doc_path: str, mark_text: str, quality: int = 80, output_path: str = None, **mark_args):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    tmp_dir = p.parent / 'tmp'
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    page = doc.load_page(0)
+
+    blank = np.ones((int(page.rect[3]), int(page.rect[2]), 3))
+    blank_savepath = tmp_dir / "blank.png"
+    plt.imsave(blank_savepath, blank)
+    mark_savepath = tmp_dir / "watermark.png"
+    add_mark_to_image(blank_savepath, mark_text, quality=quality, output_path=mark_savepath, **mark_args)
+
+    for page_index in range(doc.page_count):
+        page = doc[page_index]
+        page.insert_image(
+            page.rect,                  # where to place the image (rect-like)
+            filename=mark_savepath,     # image in a file
+            overlay=False,          # put in foreground
+        )
+    if output_path is None:
+        p = Path(doc_path)
+        output_path = p.parent / f"{p.stem}-watermarked{p.suffix}"
+    doc.save(output_path)
+
