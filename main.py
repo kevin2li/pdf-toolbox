@@ -1,11 +1,12 @@
 import argparse
+import glob
 import os
 import re
 import shutil
 from pathlib import Path
 from pprint import pprint
 from typing import List
-
+from PIL import Image
 import cv2
 import fitz
 import numpy as np
@@ -13,14 +14,24 @@ from paddleocr import PaddleOCR, PPStructure
 from tqdm import tqdm
 
 
-def plot_roi_region(input_path, type: str = 'title', output_path: str = "result.png"):
+def ppstructure_analysis(input_path: str):
     img = cv2.imread(input_path)
     structure_engine = PPStructure(table=False, ocr=False, show_log=False)
     result = structure_engine(img)
+    return result
+
+def plot_roi_region(input_path, type: str = 'title', output_path: str = None):
+    img = cv2.imread(input_path)
+    result = ppstructure_analysis(input_path)
     for item in result:
         if item['type'] == type:
             x1, y1, x2, y2 = item['bbox']
             cv2.rectangle(img, (x1, y1), (x2, y2), color=(255, 0, 0), thickness=2)
+    if output_path is None:
+        p = Path(input_path)
+        savedir = p.parent / type
+        savedir.mkdir(exist_ok=True, parents=True)
+        output_path = str(savedir / p.name)
     cv2.imwrite(output_path, img)
 
 def title_preprocess(title: str):
@@ -50,16 +61,14 @@ def title_preprocess(title: str):
     # 根据缩进匹配
     m = re.match("(\t*)\s*(.+)", title)
     res['text'] = f"{m.group(2)}"
-    res['level'] = len(m.group(1))
+    res['level'] = len(m.group(1))+1
     return res
 
-
 def extract_title(input_path: str, lang: str = 'ch', use_double_columns: bool = False) -> list:
+    # TODO: 存在标题识别不全bug
     ocr_engine = PaddleOCR(use_angle_cls=True, lang=lang) # need to run only once to download and load model into memory
-    structure_engine = PPStructure(table=False, ocr=False, show_log=False)
-
     img = cv2.imread(input_path)
-    result = structure_engine(img)
+    result = ppstructure_analysis(input_path)
     title_items = [v for v in result if v['type']=='title']       # 提取title项
     title_items = sorted(title_items, key=lambda x: x['bbox'][1]) # 从上往下排序
     if use_double_columns:
@@ -103,11 +112,14 @@ def add_toc(doc_path: str, lang: str='ch', use_double_columns: bool = False, out
         for item in result:
             pos, (title, prob) = item
             # 书签格式：[|v|, title, page [, dest]]  (层级，标题，页码，高度)
+            print('title:', title)
             res = title_preprocess(title)
             level, title = res['level'], res['text']
             height = pos[0][1] # 左上角点的y坐标
             toc.append([level, title, page.number+1, height])
-    
+    print('-'*30)
+    pprint(toc)
+    print('-'*30)
     # 校正层级
     levels = [v[0] for v in toc]
     diff = np.diff(levels)
@@ -115,6 +127,7 @@ def add_toc(doc_path: str, lang: str='ch', use_double_columns: bool = False, out
     for idx in indices:
         toc[idx][0] = toc[idx+1][0]
 
+    pprint(toc)
     # 设置目录
     doc.set_toc(toc)
     if output_path is None:
@@ -166,13 +179,16 @@ def extract_toc(doc_path: str, output_path: str = None):
             f.writelines(f"{indent}{line[1]} {line[2]}\n")
 
 def parse_range(page_range: str):
-    # e.g.: "1-3,5-6,7-10"
+    # e.g.: "1-3,5-6,7-10", "1,4-5"
     page_range = page_range.strip()
     parts = page_range.split(",")
     roi_indices = []
     for part in parts:
-        a, b = list(map(int, part.split("-")))
-        roi_indices.extend(list(range(a-1, b)))
+        out = list(map(int, part.split("-")))
+        if len(out) == 2:
+            roi_indices.extend(list(range(out[0]-1, out[1])))
+        elif len(out) == 1:
+            roi_indices.extend([out[0]-1])
     return roi_indices
 
 def slice_pdf(doc_path: str, page_range: str = "all", output_path: str = None):
@@ -194,7 +210,7 @@ def merge_pdf(doc_path_list: List[str], output_path: str = None):
         doc_temp = fitz.open(doc_path)
         doc.insert_pdf(doc_temp)
     if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[merged].pdf")
+        output_path = str(p.parent / f"[all-merged].pdf")
     doc.save(output_path)
 
 def rotate_pdf(doc_path: str, angle: int, page_range: str = "all", output_path: str = None):
@@ -215,10 +231,10 @@ def insert_pdf(doc_path1: str, doc_path2: str, pos: int, output_path: str = None
     p = Path(doc_path1)
     doc: fitz.Document = fitz.open(doc_path1)
     doc2: fitz.Document = fitz.open(doc_path2)
-    doc.insert_pdf(doc2)
     n1, n2 = doc.page_count, doc2.page_count
+    doc.insert_pdf(doc2)
     page_range = f"1-{pos},{n1+1}-{n1+n2},{pos+1}-{n1}"
-    roi_indices =  page_range(page_range)
+    roi_indices = parse_range(page_range)
     doc.select(roi_indices)
     if output_path is None:
         output_path = str(p.parent / f"{p.stem}-[inserted].pdf")
@@ -233,7 +249,7 @@ def delete_pdf(doc_path: str, page_range: str, output_path: str = None):
         roi_indices = parse_range(page_range)
     doc.delete_pages(roi_indices)
     if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[rotated].pdf")
+        output_path = str(p.parent / f"{p.stem}-[removed].pdf")
     doc.save(output_path)
 
 def encrypt_pdf(doc_path: str, user_password: str, owner_password: str = None, output_path: str = None):
@@ -271,8 +287,11 @@ def extract_text_from_pdf(doc_path: str, output_dir: str = None):
     pass
 
 def extract_images_from_pdf(doc_path: str, page_range: str = 'all', output_dir: str = None):
+    # TODO: 提取的图片显示不全
     doc = fitz.open(doc_path) # open a document
-    output_dir = Path(output_dir)
+    if output_dir is None:
+        p = Path(doc_path)
+        output_dir = p.parent / f"{p.stem}-images"
     output_dir.mkdir(parents=True, exist_ok=True)
     if page_range=="all":
         roi_indices = list(range(len(doc)))
@@ -297,10 +316,64 @@ def extract_images_from_pdf(doc_path: str, page_range: str = 'all', output_dir: 
             pix.save(savepath) # save the image as png
             pix = None
 
-def add_watermark(doc_path: str, watermark_path: str, output_path: str = None):
+def debug_item_from_pdf(doc_path: str, page_range: str = 'all', type: str = "figure", output_dir: str = None):
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
-    for page_index in range(len(doc)): # iterate over pdf pages
+    tmp_dir = p.parent / 'tmp'
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    if output_dir is None:
+        output_dir = p.parent / type
+    else:
+        output_dir = Path(output_dir) / type
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if page_range=="all":
+        roi_indices = list(range(len(doc)))
+    else:
+        roi_indices = parse_range(page_range)
+    for page_index in tqdm(roi_indices, total=len(roi_indices)):
+        page = doc[page_index] # get the page
+        pix = page.get_pixmap()  # render page to an image
+        savepath = str(tmp_dir / f"page-{page.number}.png")
+        pix.save(savepath)  # store image as a PNG
+        plot_roi_region(savepath, type, str(output_dir / f"page-{page.number}-{type}.png"))
+    shutil.rmtree(tmp_dir)
+
+def extract_item_from_pdf(doc_path: str, page_range: str = 'all', type: str = "figure", output_dir: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    tmp_dir = p.parent / 'tmp'
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    if output_dir is None:
+        output_dir = p.parent / type
+    else:
+        output_dir = Path(output_dir) / type
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if page_range=="all":
+        roi_indices = list(range(len(doc)))
+    else:
+        roi_indices = parse_range(page_range)
+    for page_index in tqdm(roi_indices, total=len(roi_indices)):
+        page = doc[page_index] # get the page
+        pix = page.get_pixmap()  # render page to an image
+        savepath = str(tmp_dir / f"page-{page.number}.png")
+        pix.save(savepath)  # store image as a PNG
+        result = ppstructure_analysis(savepath)
+        result = [v for v in result if v['type']==type]
+        
+        idx = 1
+        for item in result:
+            im_show = Image.fromarray(item['img'])
+            im_show.save(str(output_dir / f"page-{page.number}-{type}-{idx}.png"))
+            idx += 1
+
+def add_image_watermark(doc_path: str, watermark_path: str, page_range: str = 'all', output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    if page_range=="all":
+        roi_indices = list(range(len(doc)))
+    else:
+        roi_indices = parse_range(page_range)
+    for page_index in roi_indices: # iterate over pdf pages
         page = doc[page_index] # get the page
         # insert an image watermark from a file name to fit the page bounds
         page.insert_image(page.bound(),filename=watermark_path, overlay=False)
@@ -308,54 +381,165 @@ def add_watermark(doc_path: str, watermark_path: str, output_path: str = None):
         output_path = str(p.parent / f"{p.stem}-[watermark].pdf")
     doc.save(output_path)
 
+def add_text_watermark(doc_path: str, watermark_text: str, page_range: str = 'all', output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    font = fitz.Font('Helvetica')
+    pos = fitz.Point(100, 100)
+    if page_range=="all":
+        roi_indices = list(range(len(doc)))
+    else:
+        roi_indices = parse_range(page_range)
+    for page_index in roi_indices: # iterate over pdf pages
+        page = doc[page_index] # get the page
+        # page.insert_text(pos, watermark_text, fontname=font.name, fontsize=24, render_mode=3)
+        page.insert_text(pos, watermark_text, fontname=font.name, fontsize=52, render_mode=3)
+
+    if output_path is None:
+        output_path = str(p.parent / f"{p.stem}-[watermark].pdf")
+    doc.save(output_path)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("input_path", type=str)
-    parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
-    parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
     
+    sub_parsers = parser.add_subparsers()
+
+    bookmark_parser = sub_parsers.add_parser("bookmark", help="书签")
+    merge_parser = sub_parsers.add_parser("merge", help="合并")
+    insert_parser = sub_parsers.add_parser("insert", help="插入")
+    slice_parser = sub_parsers.add_parser("slice", help="切片")
+    remove_parser = sub_parsers.add_parser("remove", help="删除")
+    rotate_parser = sub_parsers.add_parser("rotate", help="旋转")
+    watermark_parser = sub_parsers.add_parser("watermark", help="水印")
+    encrypt_parser = sub_parsers.add_parser("encrypt", help="加/解密")
+    extract_parser = sub_parsers.add_parser("extract", help="提取")
+    debug_parser = sub_parsers.add_parser("debug", help="调试")
+
     # 书签
-    group = parser.add_argument_group('书签')
-    
-    group.add_argument("--lang", type=str, default="ch", choices=['ch', 'en', 'fr', 'german', 'it', 'japan', 'korean', 'ru', 'chinese_cht'], dest="lang", help="pdf语言(使用ocr方式生成目录建议指定)")
-    group.add_argument("--double-columns", action="store_true", dest='use_double_column', default=False, help="是否双栏(使用ocr方式生成目录建议指定)")
+    ocr_group = bookmark_parser.add_argument_group('ocr方式')
+    ocr_group.add_argument("-l", "--lang", type=str, default="ch", choices=['ch', 'en', 'fr', 'german', 'it', 'japan', 'korean', 'ru', 'chinese_cht'], dest="lang", help="pdf语言")
+    ocr_group.add_argument("-d", "--double-columns", action="store_true", dest='use_double_column', default=False, help="是否双栏")
+    ocr_group.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
 
-    group.add_argument("--toc-file", type=str,default=None, dest='toc_path', help="目录文件路径(使用目录文件方式需要指定)")
-    group.add_argument("--offset", type=int, default=0, dest="offset", help="偏移量，默认为0(使用目录文件方式需要指定)，计算方式：实际页码-标注页码")
+    toc_group = bookmark_parser.add_argument_group('toc文件方式')
+    toc_group.add_argument("--toc-file", type=str,default=None, dest='toc_path', help="目录文件路径")
+    toc_group.add_argument("--offset", type=int, default=0, dest="offset", help="偏移量, 默认为0，计算方式：实际页码-标注页码")
 
-    group.add_argument("-x", "--extract-toc", action="store_true", dest='extract_toc', default=False, help="提取目录到txt文件")
+    extract_group = bookmark_parser.add_argument_group('提取目录')
+    extract_group.add_argument("-x", "--extract-toc", action="store_true", dest='extract_toc', default=False, help="提取目录到txt文件")
 
-    # 书签/合并/插入/删除/截取/旋转/水印等
-    group3 = parser.add_mutually_exclusive_group()
-    group3.add_argument("--bookmark",  action="store_true", dest='toc', default=False, help="生成书签")
-    group3.add_argument("--merge",  action="store_true", dest='merge', default=False, help="合并页面")
-    group3.add_argument("--insert",  action="store_true", dest='insert', default=False, help="插入页面")
-    group3.add_argument("--slice",  action="store_true", dest='slice', default=False, help="截取页面")
-    group3.add_argument("--remove",  action="store_true", dest='remove', default=False, help="删除页面")
-    group3.add_argument("--rotate",  action="store_true", dest='rotate', default=False, help="旋转页面")
-    group3.add_argument("--extract-images",  action="store_true", dest='extract_image', default=False, help="提取图片")
-    group3.add_argument("--watermark",  action="store_true", dest='rotate', default=False, help="添加水印")
-    group3.add_argument("--encrypt",  action="store_true", dest='rotate', default=False, help="加密pdf")
-    group3.add_argument("--decrypt",  action="store_true", dest='rotate', default=False, help="解密pdf")
+    bookmark_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    bookmark_parser.add_argument("input_path", type=str, help="输入文件路径")
+
+    bookmark_parser.set_defaults(which='bookmark')
 
     # 水印
-    group4 = parser.add_argument_group('水印')
-    group4.add_argument("-w", "--watermark-path", type=str, default=None, dest="watermark_path", help="水印图片路径")
+    watermark_group = watermark_parser.add_mutually_exclusive_group(required=True)
+    watermark_group.add_argument("-w", "--watermark-path", type=str, default=None, dest="watermark_path", help="水印图片路径")
+    watermark_group.add_argument("-t", "--text", type=str, default=None, dest="watermark_text", help="水印文本")
 
+    watermark_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
+    watermark_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    watermark_parser.add_argument("input_path", type=str, help="输入文件路径")
+    watermark_parser.set_defaults(which='watermark')
 
-    # 加解密
-    group2 = parser.add_argument_group('加解密')
-    group2.add_argument("-p", "--user-pass", type=str, default="", dest="user_pass", help="指定用户密码")
-    group2.add_argument("--owner-pass", type=str, default="", dest="owner_pass", help="指定所有者密码")
+    # 加/解密
+    encrypt_parser.add_argument("--user-pass", type=str, default=None, required=True, dest="user_pass", help="指定用户密码")
+    encrypt_parser.add_argument("--owner-pass", type=str, default=None, dest="owner_pass", help="指定所有者密码")
+    encrypt_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    encrypt_parser.add_argument("-d", "--decrypt", action="store_true", dest='decrypt', default=False, help="是否解密")
+    encrypt_parser.add_argument("input_path", type=str, help="输入文件路径")
+    encrypt_parser.set_defaults(which='encrypt')
+    
+    # 旋转
+    rotate_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
+    rotate_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    rotate_parser.add_argument("-a", "--angle", type=int, default=90, choices=[90, -90, 180], dest="angle", help="旋转角度, 90表示顺时针转, -90表示逆时针转")
+    rotate_parser.add_argument("input_path", type=str, help="输入文件路径")
+    rotate_parser.set_defaults(which='rotate')
 
+    # 插入
+    insert_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    insert_parser.add_argument("-p", "--position", type=int, default=None, required=True, dest="pos", help="插入位置(该页后面)")
+    insert_parser.add_argument("input_path1", type=str, help="输入文件路径")
+    insert_parser.add_argument("input_path2", type=str, help="输入文件路径")
+    insert_parser.set_defaults(which='insert')
+
+    # 切片
+    slice_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
+    slice_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    slice_parser.add_argument("input_path", type=str, help="输入文件路径")
+    slice_parser.set_defaults(which='slice')
+
+    # 删除
+    remove_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
+    remove_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    remove_parser.add_argument("input_path", type=str, help="输入文件路径")
+    remove_parser.set_defaults(which='remove')
+
+    # 合并
+    merge_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    merge_group = merge_parser.add_mutually_exclusive_group(required=True)
+    merge_group.add_argument("-p", "--input-path", type=str, default=None, dest='input_path', help="输入文件路径,多个路径用','隔开")
+    merge_group.add_argument("-d", "--input-dir", type=str, default=None, dest='input_dir', help="输入文件目录")
+    merge_parser.set_defaults(which='merge')
+
+    # 提取
+    extract_parser.add_argument("-t", "--type", type=str, default="figure", choices=['figure', 'text', 'title', 'table', 'equation', 'header', 'footer'], dest="type", help="提取类型")
+    extract_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
+    extract_parser.add_argument("-l", "--lang", type=str, default="ch", choices=['ch', 'en', 'fr', 'german', 'it', 'japan', 'korean', 'ru', 'chinese_cht'], dest="lang", help="pdf语言")
+    extract_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    extract_parser.add_argument("input_path", type=str, help="输入文件路径")
+    extract_parser.set_defaults(which='extract')
+
+    # 调试
+    debug_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    debug_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
+    debug_parser.add_argument("-t", "--type", type=str, default="figure", choices=['figure', 'text', 'title', 'table', 'equation', 'header', 'footer'], dest="type", help="指定类型")
+    debug_parser.add_argument("-l", "--lang", type=str, default="ch", choices=['ch', 'en', 'fr', 'german', 'it', 'japan', 'korean', 'ru', 'chinese_cht'], dest="lang", help="pdf语言")
+    debug_parser.add_argument("input_path", type=str, help="输入文件路径")
+    debug_parser.set_defaults(which='debug')
 
     args = parser.parse_args()
 
     pprint(args)
-    assert False, "debug"
-    if args.toc_path is not None:
-        add_toc_from_file(args.toc_path, args.input_path, offset=args.offset, output_path=args.output_path)
-    elif args.extract_toc:
-        extract_toc(args.input_path, args.output_path)
-    else:
-        add_toc(args.input_path, lang=args.lang, use_double_columns=args.use_double_column, output_path=args.output_path)
+    # assert False, "debug"
+
+    if args.which == "bookmark":
+        if args.toc_path is not None:
+            add_toc_from_file(args.toc_path, args.input_path, offset=args.offset, output_path=args.output_path)
+        elif args.extract_toc:
+            extract_toc(args.input_path, args.output_path)
+        else:
+            add_toc(args.input_path, lang=args.lang, use_double_columns=args.use_double_column, output_path=args.output_path)
+    elif args.which == "merge":
+        if args.input_path is not None:
+            path_list = args.input_path.split(",")
+        elif args.input_dir is not None:
+            path_list = glob.glob(os.path.join(args.input_dir, "*.pdf"))
+        merge_pdf(path_list, args.output_path)
+    elif args.which == "insert":
+        insert_pdf(args.input_path1, args.input_path2, args.pos, args.output_path)
+    elif args.which == "slice":
+        slice_pdf(args.input_path, args.page_range, args.output_path)
+    elif args.which == "remove":
+        delete_pdf(args.input_path, args.page_range, args.output_path)
+    elif args.which == "rotate":
+        rotate_pdf(args.input_path, args.angle, args.page_range, args.output_path)
+    elif args.which == "watermark":
+        if args.watermark_path is not None:
+            add_image_watermark(args.input_path, args.watermark_path, args.page_range, args.output_path)
+        elif args.watermark_text is not None:
+            add_text_watermark(args.input_path, args.watermark_text, args.page_range, args.output_path)
+    elif args.which == "encrypt":
+        if args.decrypt:
+            decrypt_pdf(args.input_path, args.user_pass, args.output_path)
+        else:
+            encrypt_pdf(args.input_path, args.user_pass, args.owner_pass, args.output_path)
+    elif args.which == "extract":
+        if args.type in ['figure', 'table', 'equation']:
+            extract_item_from_pdf(args.input_path, args.page_range, args.type, args.output_path)
+        elif args.type == 'text':
+            pass
+    elif args.which == "debug":
+        debug_item_from_pdf(args.input_path, args.page_range, args.type, args.output_path)
