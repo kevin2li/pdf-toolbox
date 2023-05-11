@@ -4,12 +4,12 @@ import re
 import shutil
 from pathlib import Path
 from pprint import pprint
+from typing import List
 
 import cv2
 import fitz
 import numpy as np
 from paddleocr import PaddleOCR, PPStructure
-from PIL import Image
 from tqdm import tqdm
 
 
@@ -24,21 +24,33 @@ def plot_roi_region(input_path, type: str = 'title', output_path: str = "result.
     cv2.imwrite(output_path, img)
 
 def title_preprocess(title: str):
-    title = title.strip()
-    res = {
-        "level": 1,
-        "text": title
-    }
-    m = re.match("((\d+\.?)+)\s*(.+)", title)
+    title = title.rstrip()
+    res = {}
+    # 匹配：1.1.1 标题
+    m = re.match("\s*((\d+\.?)+)\s*(.+)", title)
     if m is not None:
         res['text'] = f"{m.group(1)} {m.group(3)}"
         res['level'] = len(m.group(1).split("."))
         return res
-    m = re.match("(第\d+[章|节])\s*(.+)", title) 
+    
+    # 匹配：第1章 标题
+    m = re.match("\s*(第.+[章|编])\s*(.+)", title)
     if m is not None:
         res['text'] = f"{m.group(1)} {m.group(2)}"
         res['level'] = 1
         return res
+
+    # 匹配：第1节 标题
+    m = re.match("\s*(第.+节)\s*(.+)", title)
+    if m is not None:
+        res['text'] = f"{m.group(1)} {m.group(2)}"
+        res['level'] = 2
+        return res
+    
+    # 根据缩进匹配
+    m = re.match("(\t*)\s*(.+)", title)
+    res['text'] = f"{m.group(2)}"
+    res['level'] = len(m.group(1))
     return res
 
 
@@ -146,7 +158,6 @@ def extract_toc(doc_path: str, output_path: str = None):
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
     out = doc.get_toc()
-    print(out)
     if output_path is None:
         output_path = str(p.parent / f"{p.stem}-[toc].txt")
     with open(output_path, "w") as f:
@@ -154,6 +165,145 @@ def extract_toc(doc_path: str, output_path: str = None):
             indent = (line[0]-1)*"\t"
             f.writelines(f"{indent}{line[1]} {line[2]}\n")
 
+def parse_range(page_range: str):
+    # e.g.: "1-3,5-6,7-10"
+    page_range = page_range.strip()
+    parts = page_range.split(",")
+    roi_indices = []
+    for part in parts:
+        a, b = list(map(int, part.split("-")))
+        roi_indices.extend(list(range(a-1, b)))
+    return roi_indices
+
+def slice_pdf(doc_path: str, page_range: str = "all", output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    if page_range == "all":
+        roi_indices = list(range(len(doc)))
+    else:
+        roi_indices = parse_range(page_range)
+    doc.select(roi_indices)
+    if output_path is None:
+        output_path = str(p.parent / f"{p.stem}-[slice].pdf")
+    doc.save(output_path)
+
+def merge_pdf(doc_path_list: List[str], output_path: str = None):
+    doc = fitz.open(doc_path_list[0])
+    p = Path(doc_path_list[0])
+    for doc_path in doc_path_list[1:]:
+        doc_temp = fitz.open(doc_path)
+        doc.insert_pdf(doc_temp)
+    if output_path is None:
+        output_path = str(p.parent / f"{p.stem}-[merged].pdf")
+    doc.save(output_path)
+
+def rotate_pdf(doc_path: str, angle: int, page_range: str = "all", output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    if page_range=="all":
+        roi_indices = list(range(len(doc)))
+    else:
+        roi_indices = parse_range(page_range)
+    for page_index in roi_indices: # iterate over pdf pages
+        page = doc[page_index] # get the page
+        page.set_rotation(angle) # rotate the page
+    if output_path is None:
+        output_path = str(p.parent / f"{p.stem}-[rotated].pdf")
+    doc.save(output_path)
+
+def insert_pdf(doc_path1: str, doc_path2: str, pos: int, output_path: str = None):
+    p = Path(doc_path1)
+    doc: fitz.Document = fitz.open(doc_path1)
+    doc2: fitz.Document = fitz.open(doc_path2)
+    doc.insert_pdf(doc2)
+    n1, n2 = doc.page_count, doc2.page_count
+    page_range = f"1-{pos},{n1+1}-{n1+n2},{pos+1}-{n1}"
+    roi_indices =  page_range(page_range)
+    doc.select(roi_indices)
+    if output_path is None:
+        output_path = str(p.parent / f"{p.stem}-[inserted].pdf")
+    doc.save(output_path)
+
+def delete_pdf(doc_path: str, page_range: str, output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    if page_range=="all":
+        roi_indices = list(range(len(doc)))
+    else:
+        roi_indices = parse_range(page_range)
+    doc.delete_pages(roi_indices)
+    if output_path is None:
+        output_path = str(p.parent / f"{p.stem}-[rotated].pdf")
+    doc.save(output_path)
+
+def encrypt_pdf(doc_path: str, user_password: str, owner_password: str = None, output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    perm = int(
+        fitz.PDF_PERM_ACCESSIBILITY # always use this
+        | fitz.PDF_PERM_PRINT # permit printing
+        | fitz.PDF_PERM_COPY # permit copying
+        | fitz.PDF_PERM_ANNOTATE # permit annotations
+    )
+    encrypt_meth = fitz.PDF_ENCRYPT_AES_256 # strongest algorithm
+    if output_path is None:
+        output_path = str(p.parent / f"{p.stem}-[encrypt].pdf")
+    doc.save(
+        output_path,
+        encryption=encrypt_meth, # set the encryption method
+        owner_pw=owner_password, # set the owner password
+        user_pw=user_password, # set the user password
+        permissions=perm, # set permissions
+    )
+
+def decrypt_pdf(doc_path: str, password: str, output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    if doc.isEncrypted:
+        doc.authenticate(password)
+        n = doc.page_count
+        doc.select(range(n))
+    if output_path is None:
+        output_path = str(p.parent / f"{p.stem}-[decrypt].pdf")
+    doc.save(output_path)
+
+def extract_text_from_pdf(doc_path: str, output_dir: str = None):
+    pass
+
+def extract_images_from_pdf(doc_path: str, output_dir: str = None):
+    doc = fitz.open(doc_path) # open a document
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for page_index in range(len(doc)): # iterate over pdf pages
+        page = doc[page_index] # get the page
+        image_list = page.get_images()
+
+        # print the number of images found on the page
+        if image_list:
+            print(f"Found {len(image_list)} images on page {page_index}")
+        else:
+            print("No images found on page", page_index)
+
+        for image_index, img in enumerate(image_list, start=1): # enumerate the image list
+            xref = img[0] # get the XREF of the image
+            pix = fitz.Pixmap(doc, xref) # create a Pixmap
+            if pix.n - pix.alpha > 3 # CMYK: convert to RGB first
+                pix = fitz.Pixmap(fitz.csRGB, pix)
+            savepath = str(output_dir / f"page_{page_index}-image_{image_index}.png")
+            pix.save(savepath) # save the image as png
+            pix = None
+
+def add_watermark(doc_path: str, watermark_path: str, output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    for page_index in range(len(doc)): # iterate over pdf pages
+        page = doc[page_index] # get the page
+        # insert an image watermark from a file name to fit the page bounds
+        page.insert_image(page.bound(),filename=watermark_path, overlay=False)
+    if output_path is None:
+        output_path = str(p.parent / f"{p.stem}-[watermark].pdf")
+    doc.save(output_path)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
