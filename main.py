@@ -1,4 +1,5 @@
 import argparse
+import copy
 import glob
 import os
 import re
@@ -6,11 +7,12 @@ import shutil
 from pathlib import Path
 from pprint import pprint
 from typing import List
-from PIL import Image
+
 import cv2
 import fitz
 import numpy as np
 from paddleocr import PaddleOCR, PPStructure
+from PIL import Image
 from tqdm import tqdm
 
 
@@ -178,7 +180,7 @@ def extract_toc(doc_path: str, output_path: str = None):
             indent = (line[0]-1)*"\t"
             f.writelines(f"{indent}{line[1]} {line[2]}\n")
 
-def parse_range(page_range: str):
+def parse_range(page_range: str, is_multiple: bool = False):
     # e.g.: "1-3,5-6,7-10", "1,4-5"
     page_range = page_range.strip()
     parts = page_range.split(",")
@@ -186,22 +188,34 @@ def parse_range(page_range: str):
     for part in parts:
         out = list(map(int, part.split("-")))
         if len(out) == 2:
-            roi_indices.extend(list(range(out[0]-1, out[1])))
+            roi_indices.append(list(range(out[0]-1, out[1])))
         elif len(out) == 1:
-            roi_indices.extend([out[0]-1])
-    return roi_indices
+            roi_indices.append([out[0]-1])
+    if is_multiple:
+        return roi_indices
+    result = [j for i in roi_indices for j in i]
+    return result
 
-def slice_pdf(doc_path: str, page_range: str = "all", output_path: str = None):
+def slice_pdf(doc_path: str, page_range: str = "all", is_multiple: bool = False, output_path: str = None):
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
     if page_range == "all":
         roi_indices = list(range(len(doc)))
     else:
-        roi_indices = parse_range(page_range)
-    doc.select(roi_indices)
-    if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[slice].pdf")
-    doc.save(output_path)
+        roi_indices = parse_range(page_range, is_multiple)
+    if not is_multiple:
+        doc.select(roi_indices)
+        if output_path is None:
+            output_path = str(p.parent / f"{p.stem}-[slice].pdf")
+        doc.save(output_path)
+    else:
+        if output_path is None:
+            output_dir = p.parent / "parts"
+            output_dir.mkdir(parents=True, exist_ok=True)
+        for indices in roi_indices:
+            doc: fitz.Document = fitz.open(doc_path)
+            doc.select(indices)
+            doc.save(str(output_dir / f"{p.stem}-[{indices[0]+1}-{indices[-1]+1}].pdf"))
 
 def merge_pdf(doc_path_list: List[str], output_path: str = None):
     doc = fitz.open(doc_path_list[0])
@@ -283,8 +297,16 @@ def decrypt_pdf(doc_path: str, password: str, output_path: str = None):
         output_path = str(p.parent / f"{p.stem}-[decrypt].pdf")
     doc.save(output_path)
 
-def extract_text_from_pdf(doc_path: str, output_dir: str = None):
-    pass
+def extract_text_from_pdf(doc_path: str, output_path: str = None):
+    doc = fitz.open(doc_path)  # open document
+    if output_path is None:
+        p = Path(doc_path)
+        output_path = p.parent / f'{p.stem}-text.txt'
+    with open(output_path, "wb") as f:  # open text output
+        for page in doc:  # iterate the document pages
+            text = page.get_text().encode("utf8")  # get plain text (is in UTF-8)
+            f.write(text)  # write text of page
+            f.write(bytes((12,)))  # write page delimiter (form feed 0x0C)
 
 def extract_images_from_pdf(doc_path: str, page_range: str = 'all', output_dir: str = None):
     # TODO: 提取的图片显示不全
@@ -382,6 +404,7 @@ def add_image_watermark(doc_path: str, watermark_path: str, page_range: str = 'a
     doc.save(output_path)
 
 def add_text_watermark(doc_path: str, watermark_text: str, page_range: str = 'all', output_path: str = None):
+    # TODO: 中文显示，样式设置，水印分散分布
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
     font = fitz.Font('Helvetica')
@@ -392,12 +415,62 @@ def add_text_watermark(doc_path: str, watermark_text: str, page_range: str = 'al
         roi_indices = parse_range(page_range)
     for page_index in roi_indices: # iterate over pdf pages
         page = doc[page_index] # get the page
-        # page.insert_text(pos, watermark_text, fontname=font.name, fontsize=24, render_mode=3)
-        page.insert_text(pos, watermark_text, fontname=font.name, fontsize=52, render_mode=3)
+        # page.insert_text(pos, watermark_text, fontname=font.name, fontsize=24, render_mode=3, rotate=90)
+        page.insert_text(pos, watermark_text)
 
     if output_path is None:
         output_path = str(p.parent / f"{p.stem}-[watermark].pdf")
     doc.save(output_path)
+
+def convert_pdf_to_images(doc_path: str, page_range: str = 'all', output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    if page_range=="all":
+        roi_indices = list(range(len(doc)))
+    else:
+        roi_indices = parse_range(page_range)
+
+    if output_path is None:
+        output_dir = p.parent / "images"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+    for page_index in roi_indices: # iterate over pdf pages
+        page = doc[page_index] # get the page
+        pix = page.get_pixmap()  # render page to an image
+        savepath = str(output_dir / f"page-{page.number}.png")
+        pix.save(savepath)  # store image as a PNG
+
+def convert_images_to_pdf(input_path: str, format_list=["png", "jpg"], output_path: str = None):
+    if output_path is None:
+        p = Path(input_path)
+        output_path = str(p.parent / f"[image-to-pdf].pdf")
+    doc = fitz.open()
+    if not os.path.isfile(input_path):
+        path_list = []
+        for format in format_list:
+            pattern = os.path.join(input_path, f"*.{format}")
+            path_list = path_list + glob.glob(pattern)
+        path_list = sorted(path_list)
+        for path in tqdm(path_list):
+            img = fitz.open(path)  # open pic as document
+            rect = img[0].rect  # pic dimension
+            pdfbytes = img.convert_to_pdf()  # make a PDF stream
+            img.close()  # no longer needed
+            imgPDF = fitz.open("pdf", pdfbytes)  # open stream as PDF
+            page = doc.new_page(width = rect.width,  # new page with ...
+                            height = rect.height)  # pic dimension
+            page.show_pdf_page(rect, imgPDF, 0)  # image fills the page
+    else:
+        img = fitz.open(input_path)
+        rect = img[0].rect  # pic dimension
+        pdfbytes = img.convert_to_pdf()  # make a PDF stream
+        img.close()  # no longer needed
+        imgPDF = fitz.open("pdf", pdfbytes)  # open stream as PDF
+        page = doc.new_page(width = rect.width,  # new page with ...
+                        height = rect.height)  # pic dimension
+        page.show_pdf_page(rect, imgPDF, 0)  # image fills the page
+    doc.save(output_path)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -413,6 +486,7 @@ if __name__ == "__main__":
     watermark_parser = sub_parsers.add_parser("watermark", help="水印")
     encrypt_parser = sub_parsers.add_parser("encrypt", help="加/解密")
     extract_parser = sub_parsers.add_parser("extract", help="提取")
+    convert_parser = sub_parsers.add_parser("convert", help="转换")
     debug_parser = sub_parsers.add_parser("debug", help="调试")
 
     # 书签
@@ -468,6 +542,7 @@ if __name__ == "__main__":
     # 切片
     slice_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
     slice_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    slice_parser.add_argument("-m", "--multiple", action="store_true", dest='is_multiple', default=False, help="是否分开保存")
     slice_parser.add_argument("input_path", type=str, help="输入文件路径")
     slice_parser.set_defaults(which='slice')
 
@@ -491,6 +566,20 @@ if __name__ == "__main__":
     extract_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
     extract_parser.add_argument("input_path", type=str, help="输入文件路径")
     extract_parser.set_defaults(which='extract')
+
+    # 转换
+    convert_parser.add_argument("-t", "--type", type=str, default="pdf-to-image", choices=["pdf-to-image", "image-to-pdf"], dest="type", help="转换类型")
+    convert_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+
+    convert_image_group = convert_parser.add_argument_group("图片转pdf")
+    convert_image_group.add_argument("-f", "--format-list", type=str, nargs="+", default=['png', 'jpg'], help="图片格式列表")
+
+    convert_pdf_group = convert_parser.add_argument_group("pdf转图片")
+    convert_pdf_group.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
+
+    convert_parser.add_argument("input_path", type=str, help="输入文件路径或目录")
+
+    convert_parser.set_defaults(which='convert')
 
     # 调试
     debug_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
@@ -521,7 +610,7 @@ if __name__ == "__main__":
     elif args.which == "insert":
         insert_pdf(args.input_path1, args.input_path2, args.pos, args.output_path)
     elif args.which == "slice":
-        slice_pdf(args.input_path, args.page_range, args.output_path)
+        slice_pdf(args.input_path, args.page_range, args.is_multiple, args.output_path)
     elif args.which == "remove":
         delete_pdf(args.input_path, args.page_range, args.output_path)
     elif args.which == "rotate":
@@ -540,6 +629,11 @@ if __name__ == "__main__":
         if args.type in ['figure', 'table', 'equation']:
             extract_item_from_pdf(args.input_path, args.page_range, args.type, args.output_path)
         elif args.type == 'text':
-            pass
+            extract_text_from_pdf(args.input_path, args.output_path)
+    elif args.which == 'convert':
+        if args.type == "image-to-pdf":
+            convert_images_to_pdf(args.input_path, args.format_list, args.output_path)
+        elif args.type == "pdf-to-image":
+            convert_pdf_to_images(args.input_path, args.page_range, args.output_path)
     elif args.which == "debug":
         debug_item_from_pdf(args.input_path, args.page_range, args.type, args.output_path)
