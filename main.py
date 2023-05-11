@@ -105,9 +105,10 @@ def add_toc(doc_path: str, lang: str='ch', use_double_columns: bool = False, out
     
     toc = []
     for page in tqdm(doc, total=doc.page_count):
-        pix = page.get_pixmap()  # render page to an image
+        pix: fitz.Pixmap = page.get_pixmap()  # render page to an image
         savepath = str(tmp_dir / f"page-{page.number}.png")
-        pix.save(savepath)  # store image as a PNG
+        # pix.save(savepath)  # store image as a PNG
+        pix.pil_save(savepath, quality=100, dpi=(1800,1800))
 
         # plot_roi_region(savepath, output_path=str(tmp_dir / f"plot-page-{page.number}.png"))
         result = extract_title(savepath, lang, use_double_columns)
@@ -335,7 +336,8 @@ def extract_images_from_pdf(doc_path: str, page_range: str = 'all', output_dir: 
             if pix.n - pix.alpha > 3: # CMYK: convert to RGB first
                 pix = fitz.Pixmap(fitz.csRGB, pix)
             savepath = str(output_dir / f"page_{page_index}-image_{image_index}.png")
-            pix.save(savepath) # save the image as png
+            # pix.save(savepath) # save the image as png
+            pix.pil_save(savepath, quality=100, dpi=(1800,1800))
             pix = None
 
 def debug_item_from_pdf(doc_path: str, page_range: str = 'all', type: str = "figure", output_dir: str = None):
@@ -356,7 +358,8 @@ def debug_item_from_pdf(doc_path: str, page_range: str = 'all', type: str = "fig
         page = doc[page_index] # get the page
         pix = page.get_pixmap()  # render page to an image
         savepath = str(tmp_dir / f"page-{page.number}.png")
-        pix.save(savepath)  # store image as a PNG
+        # pix.save(savepath)  # store image as a PNG
+        pix.pil_save(savepath, quality=100, dpi=(1800,1800))
         plot_roi_region(savepath, type, str(output_dir / f"page-{page.number}-{type}.png"))
     shutil.rmtree(tmp_dir)
 
@@ -378,7 +381,8 @@ def extract_item_from_pdf(doc_path: str, page_range: str = 'all', type: str = "f
         page = doc[page_index] # get the page
         pix = page.get_pixmap()  # render page to an image
         savepath = str(tmp_dir / f"page-{page.number}.png")
-        pix.save(savepath)  # store image as a PNG
+        # pix.save(savepath)  # store image as a PNG
+        pix.pil_save(savepath, quality=100, dpi=(1800,1800))
         result = ppstructure_analysis(savepath)
         result = [v for v in result if v['type']==type]
         
@@ -432,13 +436,15 @@ def convert_pdf_to_images(doc_path: str, page_range: str = 'all', output_path: s
 
     if output_path is None:
         output_dir = p.parent / "images"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
+    else:
+        output_dir = Path(output_path)
+    output_dir.mkdir(parents=True, exist_ok=True)
     for page_index in roi_indices: # iterate over pdf pages
         page = doc[page_index] # get the page
         pix = page.get_pixmap()  # render page to an image
         savepath = str(output_dir / f"page-{page.number}.png")
-        pix.save(savepath)  # store image as a PNG
+        # pix.save(savepath)  # store image as a PNG
+        pix.pil_save(savepath, quality=100, dpi=(1800,1800))
 
 def convert_images_to_pdf(input_path: str, format_list=["png", "jpg"], output_path: str = None):
     if output_path is None:
@@ -554,9 +560,7 @@ if __name__ == "__main__":
 
     # 合并
     merge_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
-    merge_group = merge_parser.add_mutually_exclusive_group(required=True)
-    merge_group.add_argument("-p", "--input-path", type=str, default=None, dest='input_path', help="输入文件路径,多个路径用','隔开")
-    merge_group.add_argument("-d", "--input-dir", type=str, default=None, dest='input_dir', help="输入文件目录")
+    merge_parser.add_argument("input_path", type=str, nargs="+", default=None, help="输入文件路径或目录")
     merge_parser.set_defaults(which='merge')
 
     # 提取
@@ -602,10 +606,10 @@ if __name__ == "__main__":
         else:
             add_toc(args.input_path, lang=args.lang, use_double_columns=args.use_double_column, output_path=args.output_path)
     elif args.which == "merge":
-        if args.input_path is not None:
-            path_list = args.input_path.split(",")
-        elif args.input_dir is not None:
-            path_list = glob.glob(os.path.join(args.input_dir, "*.pdf"))
+        if len(args.input_path) == 1:
+            path_list = glob.glob(os.path.join(args.input_path[0], "*.pdf"))
+        else:
+            path_list = args.input_path
         merge_pdf(path_list, args.output_path)
     elif args.which == "insert":
         insert_pdf(args.input_path1, args.input_path2, args.pos, args.output_path)
