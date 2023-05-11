@@ -270,12 +270,15 @@ def decrypt_pdf(doc_path: str, password: str, output_path: str = None):
 def extract_text_from_pdf(doc_path: str, output_dir: str = None):
     pass
 
-def extract_images_from_pdf(doc_path: str, output_dir: str = None):
+def extract_images_from_pdf(doc_path: str, page_range: str = 'all', output_dir: str = None):
     doc = fitz.open(doc_path) # open a document
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    for page_index in range(len(doc)): # iterate over pdf pages
+    if page_range=="all":
+        roi_indices = list(range(len(doc)))
+    else:
+        roi_indices = parse_range(page_range)
+    for page_index in roi_indices: # iterate over pdf pages
         page = doc[page_index] # get the page
         image_list = page.get_images()
 
@@ -288,7 +291,7 @@ def extract_images_from_pdf(doc_path: str, output_dir: str = None):
         for image_index, img in enumerate(image_list, start=1): # enumerate the image list
             xref = img[0] # get the XREF of the image
             pix = fitz.Pixmap(doc, xref) # create a Pixmap
-            if pix.n - pix.alpha > 3 # CMYK: convert to RGB first
+            if pix.n - pix.alpha > 3: # CMYK: convert to RGB first
                 pix = fitz.Pixmap(fitz.csRGB, pix)
             savepath = str(output_dir / f"page_{page_index}-image_{image_index}.png")
             pix.save(savepath) # save the image as png
@@ -308,14 +311,48 @@ def add_watermark(doc_path: str, watermark_path: str, output_path: str = None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("input_path", type=str)
-    parser.add_argument("-l", "--lang", type=str, default="ch", choices=['ch', 'en', 'fr', 'german', 'it', 'japan', 'korean', 'ru', 'chinese_cht'], dest="lang")
-    parser.add_argument("-o", "--output", type=str, default=None, dest="output_path")
-    parser.add_argument("--offset", type=int, default=0, dest="offset")
-    parser.add_argument("-d", "--double-columns", action="store_true", dest='use_double_column', default=False)
-    parser.add_argument("-x", "--extract-toc", action="store_true", dest='extract_toc', default=False)
-    parser.add_argument("-t", "--toc-file", type=str,default=None, dest='toc_path')
+    parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
+    
+    # 书签
+    group = parser.add_argument_group('书签')
+    
+    group.add_argument("--lang", type=str, default="ch", choices=['ch', 'en', 'fr', 'german', 'it', 'japan', 'korean', 'ru', 'chinese_cht'], dest="lang", help="pdf语言(使用ocr方式生成目录建议指定)")
+    group.add_argument("--double-columns", action="store_true", dest='use_double_column', default=False, help="是否双栏(使用ocr方式生成目录建议指定)")
+
+    group.add_argument("--toc-file", type=str,default=None, dest='toc_path', help="目录文件路径(使用目录文件方式需要指定)")
+    group.add_argument("--offset", type=int, default=0, dest="offset", help="偏移量，默认为0(使用目录文件方式需要指定)，计算方式：实际页码-标注页码")
+
+    group.add_argument("-x", "--extract-toc", action="store_true", dest='extract_toc', default=False, help="提取目录到txt文件")
+
+    # 书签/合并/插入/删除/截取/旋转/水印等
+    group3 = parser.add_mutually_exclusive_group()
+    group3.add_argument("--bookmark",  action="store_true", dest='toc', default=False, help="生成书签")
+    group3.add_argument("--merge",  action="store_true", dest='merge', default=False, help="合并页面")
+    group3.add_argument("--insert",  action="store_true", dest='insert', default=False, help="插入页面")
+    group3.add_argument("--slice",  action="store_true", dest='slice', default=False, help="截取页面")
+    group3.add_argument("--remove",  action="store_true", dest='remove', default=False, help="删除页面")
+    group3.add_argument("--rotate",  action="store_true", dest='rotate', default=False, help="旋转页面")
+    group3.add_argument("--extract-images",  action="store_true", dest='extract_image', default=False, help="提取图片")
+    group3.add_argument("--watermark",  action="store_true", dest='rotate', default=False, help="添加水印")
+    group3.add_argument("--encrypt",  action="store_true", dest='rotate', default=False, help="加密pdf")
+    group3.add_argument("--decrypt",  action="store_true", dest='rotate', default=False, help="解密pdf")
+
+    # 水印
+    group4 = parser.add_argument_group('水印')
+    group4.add_argument("-w", "--watermark-path", type=str, default=None, dest="watermark_path", help="水印图片路径")
+
+
+    # 加解密
+    group2 = parser.add_argument_group('加解密')
+    group2.add_argument("-p", "--user-pass", type=str, default="", dest="user_pass", help="指定用户密码")
+    group2.add_argument("--owner-pass", type=str, default="", dest="owner_pass", help="指定所有者密码")
+
+
     args = parser.parse_args()
 
+    pprint(args)
+    assert False, "debug"
     if args.toc_path is not None:
         add_toc_from_file(args.toc_path, args.input_path, offset=args.offset, output_path=args.output_path)
     elif args.extract_toc:
