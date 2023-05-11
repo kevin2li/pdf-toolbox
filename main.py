@@ -10,7 +10,8 @@ from src.lib.convert import convert_images_to_pdf, convert_pdf_to_images
 from src.lib.encrypt import decrypt_pdf, encrypt_pdf
 from src.lib.extract import (debug_item_from_pdf, extract_item_from_pdf,
                              extract_text_from_pdf)
-from src.lib.watermark import add_mark_to_image, add_mark_to_pdf
+from src.lib.watermark import (add_mark_to_image, add_mark_to_pdf,
+                               remove_mark_from_image, remove_mark_from_pdf)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -48,9 +49,8 @@ if __name__ == "__main__":
     bookmark_parser.set_defaults(which='bookmark')
 
     # 水印
-
     watermark_text_group = watermark_parser.add_argument_group("文本水印")
-    watermark_text_group.add_argument("--mark-text", type=str, required=True, default=None, dest="mark_text", help="水印文本")
+    watermark_text_group.add_argument("--mark-text", type=str, default=None, dest="mark_text", help="水印文本")
     watermark_text_group.add_argument("--font-size", type=int, default=50, dest="font_size", help="水印字体大小")
     watermark_text_group.add_argument("--angle", type=int, default=30, dest="angle", help="水印旋转角度")
     watermark_text_group.add_argument("--space", type=int, default=75, dest="space", help="水印文本间距")
@@ -60,6 +60,11 @@ if __name__ == "__main__":
     watermark_text_group.add_argument("--font-family", type=str, default="src/assets/SIMKAI.TTF", dest="font_family", help="水印字体路径")
     watermark_text_group.add_argument("--quality", type=int, default=80, dest="quality", help="水印图片保存质量")
     
+    watermark_remove_group = watermark_parser.add_argument_group("去除水印")
+    watermark_remove_group.add_argument("--remove", action="store_true", dest='remove', default=False, help="是否去除水印")
+    watermark_remove_group.add_argument("--watermark-color", type=str, default="#808080", dest="watermark_color", help="水印文本颜色")
+
+
     watermark_parser.add_argument("-t", "--type", type=str, default="pdf", choices=['pdf', 'image'], dest="type", help="被加水印对象类型")
     watermark_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
     watermark_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
@@ -163,19 +168,26 @@ if __name__ == "__main__":
     elif args.which == "rotate":
         rotate_pdf(args.input_path, args.angle, args.page_range, args.output_path)
     elif args.which == "watermark":
-        mark_args = {
-            "size": args.font_size,
-            "space": args.space,
-            "angle": args.angle,
-            "color": args.color,
-            "opacity": args.opacity,
-            "font_family": args.font_family,
-            "font_height_crop": args.font_height_crop,
-        }
-        if args.type == "pdf":
-            add_mark_to_pdf(args.input_path, args.mark_text, args.quality, **mark_args)
-        elif args.type == "image":
-            add_mark_to_image(args.input_path, args.mark_text, args.quality, **mark_args)
+        if not args.remove:
+            assert args.mark_text is None, "you must specify mark_text with '--mark-text'" 
+            mark_args = {
+                "size": args.font_size,
+                "space": args.space,
+                "angle": args.angle,
+                "color": args.color,
+                "opacity": args.opacity,
+                "font_family": args.font_family,
+                "font_height_crop": args.font_height_crop,
+            }
+            if args.type == "pdf":
+                add_mark_to_pdf(args.input_path, args.mark_text, args.quality, **mark_args)
+            elif args.type == "image":
+                add_mark_to_image(args.input_path, args.mark_text, args.quality, **mark_args)
+        else:
+            if args.type == "pdf":
+                remove_mark_from_pdf(args.input_path, args.watermark_color, args.output_path)
+            elif args.type == "image":
+                remove_mark_from_image(args.input_path, args.watermark_color, args.output_path)
     elif args.which == "encrypt":
         if args.decrypt:
             decrypt_pdf(args.input_path, args.user_pass, args.output_path)

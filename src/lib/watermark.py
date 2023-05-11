@@ -1,10 +1,17 @@
-# adapted from: https://github.com/2Dou/watermarker/blob/master/marker.py
-import numpy as np
-import matplotlib.pyplot as plt
+# partial adapted from: https://github.com/2Dou/watermarker/blob/master/marker.py
 import math
+import shutil
+from itertools import product
 from pathlib import Path
-from PIL import Image, ImageFont, ImageDraw, ImageEnhance, ImageChops, ImageOps
+from typing import Tuple, Union
+
 import fitz
+import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFont, ImageOps
+
+from src.lib.convert import convert_images_to_pdf
+
 
 def set_opacity(im, opacity):
     '''
@@ -16,7 +23,6 @@ def set_opacity(im, opacity):
     alpha = ImageEnhance.Brightness(alpha).enhance(opacity)
     im.putalpha(alpha)
     return im
-
 
 def crop_image(im):
     '''裁剪图片边缘空白'''
@@ -149,4 +155,63 @@ def add_mark_to_pdf(doc_path: str, mark_text: str, quality: int = 80, output_pat
         p = Path(doc_path)
         output_path = p.parent / f"{p.stem}-watermarked{p.suffix}"
     doc.save(output_path)
+
+def color_to_rgb(color):
+    import re
+
+    from matplotlib import colors
+
+    if isinstance(color, str):
+        # 检查是否为颜色名称
+        if color in colors.CSS4_COLORS:
+            return colors.to_rgb(color)
+        # 检查是否为十六进制码
+        elif re.match(r'^#(?:[0-9a-fA-F]{3}){1,2}$', color):
+            return colors.to_rgb(color)
+        else:
+            raise ValueError('Unsupported color format')
+    elif isinstance(color, tuple):
+        # 检查是否为 RGB 或 RGBA 值
+        if len(color) in [3, 4] and all(isinstance(c, int) and 0 <= c <= 255 for c in color):
+            return colors.to_rgb(color)
+        else:
+            raise ValueError('Unsupported color format')
+    else:
+        raise TypeError('Invalid argument type')
+
+def remove_mark_from_image(img_path: str, water_mark_color: Union[str, Tuple[int, int, int], Tuple[int, int, int, float]], output_path: str = None):
+    p = Path(img_path)
+    threshold = sum(np.array(color_to_rgb(water_mark_color))*255)
+    img = Image.open(img_path)
+    width, height = img.size
+    for y in range(height):
+        for x in range(width):
+            if sum(img.getpixel((x, y))) >= threshold:
+                img.putpixel((x, y), (255, 255, 255))
+    if output_path is None:
+        p = Path(img_path)
+        output_path = p.parent / f"{p.stem}-remove-watermark{p.suffix}"
+    img.save(output_path, quality=100, dpi=(1800,1800))
+
+def remove_mark_from_pdf(doc_path: str, water_mark_color: Union[str, Tuple[int, int, int], Tuple[int, int, int, float]], output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    threshold = sum(np.array(color_to_rgb(water_mark_color))*255)
+    tmp_dir = p.parent / 'tmp'
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    for page_index in range(doc.page_count):
+        page = doc[page_index]
+        pix = page.get_pixmap()
+        #遍历图片中的宽和高，如果像素的rgb值总和大于510，就认为是水印，转换成255，255,255-->即白色
+        for pos in product(range(pix.width), range(pix.height)):
+            if sum(pix.pixel(pos[0], pos[1])) >= threshold:
+                pix.set_pixel(pos[0], pos[1], (255, 255, 255))
+        savepath = tmp_dir / f"{page.number}.png"
+        pix.pil_save(savepath, quality=100, dpi=(page.rect[3], page.rect[2]))
+
+    if output_path is None:
+        p = Path(doc_path)
+        output_path = p.parent / f"{p.stem}-remove-watermark{p.suffix}"
+    convert_images_to_pdf(tmp_dir, ['png'], output_path)
+    shutil.rmtree(tmp_dir)
 
