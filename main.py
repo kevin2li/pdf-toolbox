@@ -1,15 +1,18 @@
 import argparse
 import glob
 import os
+from pathlib import Path
 from pprint import pprint
 
-from src.lib.basic import (delete_pdf, insert_pdf, merge_pdf, rotate_pdf,
+from src.lib.basic import (delete_pdf, insert_pdf, merge_pdf, rotate_pdf,split_pdf,
                            slice_pdf)
-from src.lib.bookmark import add_toc_from_ocr, add_toc_from_file, extract_toc, transform_toc_file
+from src.lib.bookmark import (add_toc_from_file, add_toc_from_ocr, extract_toc,
+                              transform_toc_file)
 from src.lib.convert import convert_images_to_pdf, convert_pdf_to_images
 from src.lib.encrypt import decrypt_pdf, encrypt_pdf
 from src.lib.extract import (debug_item_from_pdf, extract_item_from_pdf,
                              extract_text_from_pdf)
+from src.lib.ocr import ocr_from_image, ocr_from_pdf
 from src.lib.watermark import (add_mark_to_image, add_mark_to_pdf,
                                remove_mark_from_image, remove_mark_from_pdf)
 
@@ -18,18 +21,19 @@ if __name__ == "__main__":
     
     sub_parsers = parser.add_subparsers()
 
-    bookmark_parser  = sub_parsers.add_parser("bookmark", help="书签")
-    merge_parser     = sub_parsers.add_parser("merge", help="合并")
-    insert_parser    = sub_parsers.add_parser("insert", help="插入")
-    slice_parser     = sub_parsers.add_parser("slice", help="切片")
-    remove_parser    = sub_parsers.add_parser("remove", help="删除")
-    rotate_parser    = sub_parsers.add_parser("rotate", help="旋转")
-    watermark_parser = sub_parsers.add_parser("watermark", help="水印")
-    encrypt_parser   = sub_parsers.add_parser("encrypt", help="加/解密")
-    extract_parser   = sub_parsers.add_parser("extract", help="提取")
-    convert_parser   = sub_parsers.add_parser("convert", help="转换")
-    ocr_parser       = sub_parsers.add_parser("ocr", help="OCR识别")
-    debug_parser     = sub_parsers.add_parser("debug", help="调试")
+    bookmark_parser  = sub_parsers.add_parser("bookmark", help="书签", description="pdf添加书签、提取书签、书签清洗等")
+    merge_parser     = sub_parsers.add_parser("merge", help="合并", description="将多个pdf文件合并成一个文件")
+    split_parser     = sub_parsers.add_parser("split", help="拆分", description="将pdf文件拆分成多个文件")
+    insert_parser    = sub_parsers.add_parser("insert", help="插入", description="将第2个pdf文件插入到第1个pdf文件的指定位置")
+    slice_parser     = sub_parsers.add_parser("slice", help="切片", description="从pdf中选取部分页面,也可以用来重排顺序")
+    remove_parser    = sub_parsers.add_parser("remove", help="删除", description="删除指定的pdf页面")
+    rotate_parser    = sub_parsers.add_parser("rotate", help="旋转", description="对pdf文件(或部分页面)进行旋转")
+    watermark_parser = sub_parsers.add_parser("watermark", help="水印", description="给pdf添加水印或去除水印")
+    encrypt_parser   = sub_parsers.add_parser("encrypt", help="加/解密", description="对pdf进行加密或解密等")
+    extract_parser   = sub_parsers.add_parser("extract", help="提取", description="从pdf中提取文本、图片、表格、公式等")
+    convert_parser   = sub_parsers.add_parser("convert", help="转换", description="与pdf相关的文件格式转换，如pdf转图片、图片转pdf等")
+    ocr_parser       = sub_parsers.add_parser("ocr", help="OCR识别", description="使用paddleocr识别图片或pdf文件中的文本")
+    debug_parser     = sub_parsers.add_parser("debug", help="调试", description="可以指定title、figure、table等不同类型来判断paddleocr检测效果")
 
     # 书签
     bookmark_subparsers     = bookmark_parser.add_subparsers()
@@ -131,6 +135,12 @@ if __name__ == "__main__":
     merge_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
     merge_parser.add_argument("input_path", type=str, nargs="+", default=None, help="输入文件路径或目录")
     merge_parser.set_defaults(which='merge')
+
+    # 拆分
+    split_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    split_parser.add_argument("input_path", type=str, default=None, help="输入文件路径或目录")
+    split_parser.add_argument("-p", "--pages-per-part", type=int, default=10, dest="pages_per_part", help="每个部分包含的最大页数")
+    split_parser.set_defaults(which='split')
 
     # 提取
     extract_parser.add_argument("-t", "--type", type=str, default="figure", choices=['figure', 'text', 'title', 'table', 'equation', 'header', 'footer'], dest="type", help="提取类型")
@@ -236,7 +246,13 @@ if __name__ == "__main__":
         elif args.type == "pdf-to-image":
             convert_pdf_to_images(args.input_path, args.page_range, args.output_path)
     elif args.which == "ocr":
-        # if args.input_path
+        p = Path(args.input_path)
+        if p.suffix in (".png", ".jpg", ".jpeg"):
+            ocr_from_image(args.input_path, args.lang, args.output_path, args.offset)
+        elif p.suffix in (".pdf"):
+            ocr_from_pdf(args.input_path, args.page_range, args.lang, args.output_path, args.offset)
         pass
+    elif args.which == "split":
+        split_pdf(args.input_path, args.pages_per_part, args.output_path)
     elif args.which == "debug":
         debug_item_from_pdf(args.input_path, args.page_range, args.type, args.output_path)

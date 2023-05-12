@@ -30,6 +30,17 @@ def slice_pdf(doc_path: str, page_range: str = "all", is_multiple: bool = False,
             doc.select(indices)
             doc.save(str(output_dir / f"{p.stem}-[{indices[0]+1}-{indices[-1]+1}].pdf"))
 
+def split_pdf(doc_path: str, pages_per_part: int = 10, output_path: str = None):
+    doc: fitz.Document = fitz.open(doc_path)
+    ranges = []
+    for i in range(1,doc.page_count+1,pages_per_part):
+        if i+pages_per_part > doc.page_count:
+            ranges.append(f"{i}-{doc.page_count}")
+        else:
+            ranges.append(f"{i}-{i+pages_per_part-1}")
+    ranges =  ",".join(ranges)
+    slice_pdf(doc_path, ranges, is_multiple=True, output_path=output_path)
+
 def merge_pdf(doc_path_list: List[str], output_path: str = None):
     doc = fitz.open(doc_path_list[0])
     p = Path(doc_path_list[0])

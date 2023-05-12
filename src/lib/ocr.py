@@ -1,12 +1,17 @@
-
+import glob
 import re
+import shutil
 from pathlib import Path
 from pprint import pprint
 
 import cv2
-from paddleocr import PaddleOCR, PPStructure, draw_ocr
+import fitz
+from paddleocr import PaddleOCR, draw_ocr
 from PIL import Image
+
 from src.lib.bookmark import transform_toc_file
+from src.utils import parse_range
+
 
 def center_y(elem):
     return (elem[0][0][1]+elem[0][3][1])/2
@@ -38,7 +43,7 @@ def write_ocr_result(ocr_results, output_path: str, offset: int = 5):
             line = line.rstrip()
             f.write(f"{line}\n")
 
-def ocr_from_image(input_path: str, lang: str = 'ch', output_path: str = None):
+def ocr_from_image(input_path: str, lang: str = 'ch', output_path: str = None, offset: float = 5.):
     ocr_engine = PaddleOCR(use_angle_cls=True, lang=lang) # need to run only once to download and load model into memory
     img = cv2.imread(input_path)
     result = ocr_engine.ocr(img, cls=False)[0]
@@ -52,7 +57,7 @@ def ocr_from_image(input_path: str, lang: str = 'ch', output_path: str = None):
 
     p = Path(input_path)
     if output_path is None:
-        output_dir = p.parent / "ocr"
+        output_dir = p.parent / "ocr_result"
     else:
         output_dir = Path(output_path)    
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -60,8 +65,39 @@ def ocr_from_image(input_path: str, lang: str = 'ch', output_path: str = None):
     text_output_path = str(output_dir / f"{p.stem}-ocr.txt")
 
     im_show.save(img_output_path)
-    write_ocr_result(result, text_output_path)
+    write_ocr_result(result, text_output_path, offset)
 
+def ocr_from_pdf(doc_path: str, page_range: str = 'all', lang: str = 'ch', output_path: str = None, offset: float = 5.):
+    doc: fitz.Document = fitz.open(doc_path)
+    p = Path(doc_path)
+    tmp_dir = p.parent / 'tmp'
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    if output_path is None:
+        output_path = p.parent / f"{p.stem}_ocr_result"
+        output_path.mkdir(parents=True, exist_ok=True)
+
+    if page_range == "all":
+        roi_indices = list(range(len(doc)))
+    else:
+        roi_indices = parse_range(page_range)
+    for page_index in roi_indices: # iterate over pdf pages
+        page = doc[page_index] # get the page
+        pix: fitz.Pixmap = page.get_pixmap()  # render page to an image
+        savepath = str(tmp_dir / f"page-{page.number}.png")
+        pix.pil_save(savepath, quality=100, dpi=(1800,1800))
+        ocr_from_image(savepath, lang, output_path=str(output_path), offset=offset)
+    print("output_path:", output_path)
+    import time
+    time.sleep(1)
+    path_list = glob.glob(str(output_path / "*.txt"))
+    merged_path = output_path / "merged.txt"
+    with open(merged_path, "a") as f:
+        for path in path_list:
+            with open(path, "r") as f2:
+                for line in f2:
+                    f.write(line)
+                    print(line)
+    shutil.rmtree(tmp_dir)
 
 if __name__ == "__main__":
     input_path = "/home/likai/code/pdf_tocgen/assets/toc2.png"

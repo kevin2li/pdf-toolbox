@@ -1,17 +1,15 @@
 import glob
-import os
 import re
 import shutil
 from pathlib import Path
-from pprint import pprint
 
 import cv2
 import fitz
 import numpy as np
-from paddleocr import PaddleOCR, PPStructure
+from paddleocr import PaddleOCR
 from tqdm import tqdm
 
-from src.utils import parse_range, ppstructure_analysis
+from src.utils import ppstructure_analysis
 
 
 def title_preprocess(title: str):
@@ -42,7 +40,7 @@ def title_preprocess(title: str):
     
     # 根据缩进匹配
     m = re.match("(\t*)\s*(.+)", title)
-    res['text'] = f"{m.group(2)}"
+    res['text'] = f"{m.group(2)}".rstrip()
     res['level'] = len(m.group(1))+1
     return res
 
@@ -100,9 +98,6 @@ def add_toc_from_ocr(doc_path: str, lang: str='ch', use_double_columns: bool = F
             level, title = res['level'], res['text']
             height = pos[0][1] # 左上角点的y坐标
             toc.append([level, title, page.number+1, height])
-    print('-'*30)
-    pprint(toc)
-    print('-'*30)
     # 校正层级
     levels = [v[0] for v in toc]
     diff = np.diff(levels)
@@ -110,7 +105,6 @@ def add_toc_from_ocr(doc_path: str, lang: str='ch', use_double_columns: bool = F
     for idx in indices:
         toc[idx][0] = toc[idx+1][0]
 
-    pprint(toc)
     # 设置目录
     doc.set_toc(toc)
     if output_path is None:
@@ -177,7 +171,7 @@ def transform_toc_file(toc_path: str, is_add_indent: bool = True, is_remove_trai
                 new_line = new_line.rstrip() + "\n"
             if is_add_indent:
                 res = title_preprocess(new_line)
-                new_line = (res['level']-1)*'\t' + res['text'].rstrip() + "\n"
+                new_line = (res['level']-1)*'\t' + res['text'] + "\n"
             if add_offset:
                 m = re.search("(\d+)(?=\s*$)", new_line)
                 if m is not None:

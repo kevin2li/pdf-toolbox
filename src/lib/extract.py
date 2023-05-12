@@ -116,5 +116,5 @@ def debug_item_from_pdf(doc_path: str, page_range: str = 'all', type: str = "fig
         savepath = str(tmp_dir / f"page-{page.number}.png")
         # pix.save(savepath)  # store image as a PNG
         pix.pil_save(savepath, quality=100, dpi=(1800,1800))
-        plot_roi_region(savepath, type, str(output_dir / f"page-{page.number}-{type}.png"))
+        plot_roi_region(savepath, type, str(output_dir / f"page-{page.number+1}-{type}.png"))
     shutil.rmtree(tmp_dir)
