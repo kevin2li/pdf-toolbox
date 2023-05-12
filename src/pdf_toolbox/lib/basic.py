@@ -19,7 +19,7 @@ def slice_pdf(doc_path: str, page_range: str = "all", is_multiple: bool = False,
     if not is_multiple:
         doc.select(roi_indices)
         if output_path is None:
-            output_path = str(p.parent / f"{p.stem}-[slice].pdf")
+            output_path = str(p.parent / f"{p.stem}-slice.pdf")
         doc.save(output_path)
     else:
         if output_path is None:
@@ -28,7 +28,7 @@ def slice_pdf(doc_path: str, page_range: str = "all", is_multiple: bool = False,
         for indices in roi_indices:
             doc: fitz.Document = fitz.open(doc_path)
             doc.select(indices)
-            doc.save(str(output_dir / f"{p.stem}-[{indices[0]+1}-{indices[-1]+1}].pdf"))
+            doc.save(str(output_dir / f"{p.stem}-{indices[0]+1}-{indices[-1]+1}.pdf"))
 
 def split_pdf(doc_path: str, pages_per_part: int = 10, output_path: str = None):
     doc: fitz.Document = fitz.open(doc_path)
@@ -62,7 +62,7 @@ def rotate_pdf(doc_path: str, angle: int, page_range: str = "all", output_path: 
         page = doc[page_index] # get the page
         page.set_rotation(angle) # rotate the page
     if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[rotated].pdf")
+        output_path = str(p.parent / f"{p.stem}-rotated.pdf")
     doc.save(output_path)
 
 def insert_pdf(doc_path1: str, doc_path2: str, pos: int, output_path: str = None):
@@ -75,7 +75,7 @@ def insert_pdf(doc_path1: str, doc_path2: str, pos: int, output_path: str = None
     roi_indices = parse_range(page_range)
     doc.select(roi_indices)
     if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[inserted].pdf")
+        output_path = str(p.parent / f"{p.stem}-inserted.pdf")
     doc.save(output_path)
 
 def delete_pdf(doc_path: str, page_range: str, output_path: str = None):
@@ -87,5 +87,5 @@ def delete_pdf(doc_path: str, page_range: str, output_path: str = None):
         roi_indices = parse_range(page_range)
     doc.delete_pages(roi_indices)
     if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[removed].pdf")
+        output_path = str(p.parent / f"{p.stem}-removed.pdf")
     doc.save(output_path)

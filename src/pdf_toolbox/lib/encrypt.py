@@ -14,7 +14,7 @@ def encrypt_pdf(doc_path: str, user_password: str, owner_password: str = None, o
     )
     encrypt_meth = fitz.PDF_ENCRYPT_AES_256 # strongest algorithm
     if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[encrypt].pdf")
+        output_path = str(p.parent / f"{p.stem}-encrypt.pdf")
     doc.save(
         output_path,
         encryption=encrypt_meth, # set the encryption method
@@ -31,6 +31,6 @@ def decrypt_pdf(doc_path: str, password: str, output_path: str = None):
         n = doc.page_count
         doc.select(range(n))
     if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[decrypt].pdf")
+        output_path = str(p.parent / f"{p.stem}-decrypt.pdf")
     doc.save(output_path)
 

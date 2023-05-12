@@ -1,3 +1,4 @@
+import os
 import glob
 import shutil
 from pathlib import Path
@@ -7,6 +8,7 @@ import fitz
 from paddleocr import PaddleOCR, draw_ocr
 from PIL import Image
 from tqdm import tqdm
+import re
 
 from pdf_toolbox.lib.bookmark import transform_toc_file
 from pdf_toolbox.utils import parse_range
@@ -42,8 +44,8 @@ def write_ocr_result(ocr_results, output_path: str, offset: int = 5):
             line = line.rstrip()
             f.write(f"{line}\n")
 
-def ocr_from_image(input_path: str, lang: str = 'ch', output_path: str = None, offset: float = 5.):
-    ocr_engine = PaddleOCR(use_angle_cls=True, lang=lang) # need to run only once to download and load model into memory
+def ocr_from_image(input_path: str, lang: str = 'ch', output_path: str = None, offset: float = 5., show_log: bool = False):
+    ocr_engine = PaddleOCR(use_angle_cls=True, lang=lang, show_log=show_log) # need to run only once to download and load model into memory
     img = cv2.imread(input_path)
     result = ocr_engine.ocr(img, cls=False)[0]
 
@@ -67,15 +69,16 @@ def ocr_from_image(input_path: str, lang: str = 'ch', output_path: str = None, o
     im_show.save(img_output_path)
     write_ocr_result(result, text_output_path, offset)
 
-def ocr_from_pdf(doc_path: str, page_range: str = 'all', lang: str = 'ch', output_path: str = None, offset: float = 5.):
+def ocr_from_pdf(doc_path: str, page_range: str = 'all', lang: str = 'ch', output_path: str = None, offset: float = 5., show_log: bool = False):
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
     tmp_dir = p.parent / 'tmp'
     tmp_dir.mkdir(parents=True, exist_ok=True)
     if output_path is None:
         output_path = p.parent / f"{p.stem}_ocr_result"
-        output_path.mkdir(parents=True, exist_ok=True)
-
+    else:
+        output_path = Path(output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
     if page_range == "all":
         roi_indices = list(range(len(doc)))
     else:
@@ -85,12 +88,14 @@ def ocr_from_pdf(doc_path: str, page_range: str = 'all', lang: str = 'ch', outpu
         pix: fitz.Pixmap = page.get_pixmap()  # render page to an image
         savepath = str(tmp_dir / f"page-{page.number+1}.png")
         pix.pil_save(savepath, quality=100, dpi=(1800,1800))
-        ocr_from_image(savepath, lang, output_path=str(output_path), offset=offset)
-    path_list = glob.glob(str(output_path / "*.txt"))
+        ocr_from_image(savepath, lang, output_path=str(output_path), offset=offset, show_log=show_log)
+
+    path_list = sorted(list(filter(lambda x: x.endswith(".txt"), os.listdir(output_path))), key=lambda x: int(re.search("(\d+)", x).group(1)))
     merged_path = output_path / "merged.txt"
     with open(merged_path, "a", encoding="utf-8") as f:
         for path in path_list:
-            with open(path, "r", encoding="utf-8") as f2:
+            abs_path = os.path.join(output_path, path)
+            with open(abs_path, "r", encoding="utf-8") as f2:
                 for line in f2:
                     f.write(line)
     shutil.rmtree(tmp_dir)

@@ -43,18 +43,24 @@ def main():
     bookmark_clean_parser   = bookmark_subparsers.add_parser("clean", help="清洗书签文件")
 
     ## 书签添加
-    bookmark_add_parser.add_argument("-t", "--type", type=str, choices=['ocr', 'file'], default='from_file', dest='type', help='添加方式类型')
-    bookmark_add_parser.add_argument("input_path", type=str, help="输入文件路径")
-    bookmark_add_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    bookmark_add_subparsers = bookmark_add_parser.add_subparsers()
+    from_ocr_parser = bookmark_add_subparsers.add_parser("from_ocr", help="使用ocr自动生成目录书签")
+    from_file_parser = bookmark_add_subparsers.add_parser("from_file", help="从文件导入目录书签")
 
-    bookmark_add_ocr_group = bookmark_add_parser.add_argument_group('ocr方式')
-    bookmark_add_ocr_group.add_argument("-l", "--lang", type=str, default="ch", choices=['ch', 'en', 'fr', 'german', 'it', 'japan', 'korean', 'ru', 'chinese_cht'], dest="lang", help="pdf语言")
-    bookmark_add_ocr_group.add_argument("-d", "--double-columns", action="store_true", dest='use_double_column', default=False, help="是否双栏")
-    bookmark_add_ocr_group.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
+    from_ocr_parser.add_argument("-l", "--lang", type=str, default="ch", choices=['ch', 'en', 'fr', 'german', 'it', 'japan', 'korean', 'ru', 'chinese_cht'], dest="lang", help="pdf语言")
+    from_ocr_parser.add_argument("-d", "--double-columns", action="store_true", dest='use_double_column', default=False, help="是否双栏")
+    from_ocr_parser.add_argument("-f", "--overwrite", action="store_true", dest='is_overwrite', default=False, help="是否覆盖原文件(指定此项将忽略output_path)")
+    from_ocr_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
+    from_ocr_parser.add_argument("input_path", type=str, help="输入文件路径")
+    from_ocr_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    from_ocr_parser.set_defaults(bookmark_add_which='ocr')
 
-    bookmark_add_toc_group = bookmark_add_parser.add_argument_group('toc文件方式')
-    bookmark_add_toc_group.add_argument("--toc-file", type=str,default=None, dest='toc_path', help="目录文件路径")
-    bookmark_add_toc_group.add_argument("--offset", type=int, default=0, dest="offset", help="偏移量, 默认为0，计算方式：实际页码-标注页码")
+    from_file_parser.add_argument("-t", "--toc-file", type=str,default=None, dest='toc_path', help="目录文件路径")
+    from_file_parser.add_argument("-d", "--offset", type=int, default=0, dest="offset", help="偏移量, 默认为0，计算方式：实际页码-标注页码")
+    from_file_parser.add_argument("-f", "--overwrite", action="store_true", dest='is_overwrite', default=False, help="是否覆盖原文件(指定此项将忽略output_path)")
+    from_file_parser.add_argument("input_path", type=str, help="输入文件路径")
+    from_file_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    from_file_parser.set_defaults(bookmark_add_which='file')
 
     bookmark_add_parser.set_defaults(bookmark_which='add')
 
@@ -170,6 +176,7 @@ def main():
     ocr_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
     ocr_parser.add_argument("-l", "--lang", type=str, default="ch", choices=['ch', 'en', 'fr', 'german', 'it', 'japan', 'korean', 'ru', 'chinese_cht'], dest="lang", help="pdf语言")
     ocr_parser.add_argument("-d", "--offset", type=float, default=5., dest="offset", help="判断同一行的偏移量")
+    ocr_parser.add_argument("-s", "--show-log",  action="store_true", dest='show_log', default=False, help="是否显示log")
     ocr_parser.add_argument("input_path", type=str, help="输入文件路径")
     ocr_parser.set_defaults(which='ocr')
 
@@ -188,10 +195,12 @@ def main():
 
     if args.which == "bookmark":
         if args.bookmark_which == "add":
-            if args.type == 'ocr':
-                add_toc_from_ocr(args.input_path, lang=args.lang, use_double_columns=args.use_double_column, output_path=args.output_path)
-            elif args.type == 'file':
-                add_toc_from_file(args.toc_path, args.input_path, offset=args.offset, output_path=args.output_path)
+            if args.bookmark_add_which == 'ocr':
+                output_path = args.input_path if args.is_overwrite else args.output_path
+                add_toc_from_ocr(args.input_path, lang=args.lang, use_double_columns=args.use_double_column, output_path=output_path)
+            elif args.bookmark_add_which == 'file':
+                output_path = args.input_path if args.is_overwrite else args.output_path
+                add_toc_from_file(args.toc_path, args.input_path, offset=args.offset, output_path=output_path)
         elif args.bookmark_which == "clean":
             transform_toc_file(args.input_path, args.is_add_indent, args.is_remove_trailing_dots, args.add_offset, args.output_path)
         elif args.bookmark_which == "extract":
@@ -249,9 +258,9 @@ def main():
     elif args.which == "ocr":
         p = Path(args.input_path)
         if p.suffix in (".png", ".jpg", ".jpeg"):
-            ocr_from_image(args.input_path, args.lang, args.output_path, args.offset)
+            ocr_from_image(args.input_path, args.lang, args.output_path, args.offset, args.show_log)
         elif p.suffix in (".pdf"):
-            ocr_from_pdf(args.input_path, args.page_range, args.lang, args.output_path, args.offset)
+            ocr_from_pdf(args.input_path, args.page_range, args.lang, args.output_path, args.offset, args.show_log)
         pass
     elif args.which == "split":
         split_pdf(args.input_path, args.pages_per_part, args.output_path)

@@ -21,7 +21,7 @@ def title_preprocess(title: str):
     m = re.match("\s*((\d+\.?)+)\s*(.+)", title)
     if m is not None:
         res['text'] = f"{m.group(1)} {m.group(3)}"
-        res['level'] = len(m.group(1).split("."))
+        res['level'] = len([v for v in m.group(1).split(".") if v])
         return res
     
     # 匹配：第1章 标题
@@ -46,7 +46,7 @@ def title_preprocess(title: str):
 
 def extract_title(input_path: str, lang: str = 'ch', use_double_columns: bool = False) -> list:
     # TODO: 存在标题识别不全bug
-    ocr_engine = PaddleOCR(use_angle_cls=True, lang=lang) # need to run only once to download and load model into memory
+    ocr_engine = PaddleOCR(use_angle_cls=True, lang=lang, show_log=False) # need to run only once to download and load model into memory
     img = cv2.imread(input_path)
     result = ppstructure_analysis(input_path)
     title_items = [v for v in result if v['type']=='title']       # 提取title项
@@ -91,7 +91,6 @@ def add_toc_from_ocr(doc_path: str, lang: str='ch', use_double_columns: bool = F
         for item in result:
             pos, (title, prob) = item
             # 书签格式：[|v|, title, page [, dest]]  (层级，标题，页码，高度)
-            print('title:', title)
             res = title_preprocess(title)
             level, title = res['level'], res['text']
             height = pos[0][1] # 左上角点的y坐标
@@ -106,7 +105,7 @@ def add_toc_from_ocr(doc_path: str, lang: str='ch', use_double_columns: bool = F
     # 设置目录
     doc.set_toc(toc)
     if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[toc].pdf")
+        output_path = str(p.parent / f"{p.stem}-toc.pdf")
     doc.save(output_path)
     shutil.rmtree(tmp_dir)
 
@@ -143,7 +142,7 @@ def add_toc_from_file(toc_path: str, doc_path: str, offset: int, output_path: st
 
     doc.set_toc(toc)
     if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[toc].pdf")
+        output_path = str(p.parent / f"{p.stem}-toc.pdf")
     doc.save(output_path)
 
 def extract_toc(doc_path: str, output_path: str = None):
@@ -151,7 +150,7 @@ def extract_toc(doc_path: str, output_path: str = None):
     p = Path(doc_path)
     out = doc.get_toc()
     if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-[toc].txt")
+        output_path = str(p.parent / f"{p.stem}-toc.txt")
     with open(output_path, "w", encoding="utf-8") as f:
         for line in out:
             indent = (line[0]-1)*"\t"
@@ -160,7 +159,7 @@ def extract_toc(doc_path: str, output_path: str = None):
 def transform_toc_file(toc_path: str, is_add_indent: bool = True, is_remove_trailing_dots: bool = True, add_offset: int = 0, output_path: str = None):
     if output_path is None:
         p = Path(toc_path)
-        output_path = str(p.parent / f"{p.stem}-toc-transform.txt")
+        output_path = str(p.parent / f"{p.stem}-toc-clean.txt")
     with open(toc_path, "r", encoding="utf-8") as f, open(output_path, "w", encoding="utf-8") as f2:
         for line in f:
             new_line = line
