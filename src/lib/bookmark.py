@@ -15,6 +15,8 @@ from src.utils import parse_range, ppstructure_analysis
 
 
 def title_preprocess(title: str):
+    """提取标题层级和标题内容
+    """
     title = title.rstrip()
     res = {}
     # 匹配：1.1.1 标题
@@ -75,7 +77,7 @@ def extract_title(input_path: str, lang: str = 'ch', use_double_columns: bool = 
                 out.append([new_pos, (title, prob)])
     return out
 
-def add_toc(doc_path: str, lang: str='ch', use_double_columns: bool = False, output_path: str = None):
+def add_toc_from_ocr(doc_path: str, lang: str='ch', use_double_columns: bool = False, output_path: str = None):
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
     tmp_dir = p.parent / 'tmp'
@@ -117,20 +119,24 @@ def add_toc(doc_path: str, lang: str='ch', use_double_columns: bool = False, out
     shutil.rmtree(tmp_dir)
 
 def add_toc_from_file(toc_path: str, doc_path: str, offset: int, output_path: str = None):
-    """从目录文件中导入书签到pdf文件
+    """从目录文件中导入书签到pdf文件(若文件中存在行没指定页码则按1算)
 
     Args:
         toc_path (str): 目录文件路径
         doc_path (str): pdf文件路径
         offset (int): 偏移量, 计算方式: “pdf文件实际页码” - “目录文件标注页码”
-    """    
+    """
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
     toc = []
     with open(toc_path, "r") as f:
         for line in f:
             parts = line.split()
-            pno = int(parts[-1]) + offset
+            pno = 1
+            m = re.search("(\d+)(?=\s*$)", line)
+            if m is not None:
+                pno = int(m.group(1))
+            pno = pno + offset
             title = " ".join(map(lambda x: x.strip(), parts[:-1]))
             res = title_preprocess(title)
             level, title = res['level'], res['text']
@@ -158,3 +164,24 @@ def extract_toc(doc_path: str, output_path: str = None):
         for line in out:
             indent = (line[0]-1)*"\t"
             f.writelines(f"{indent}{line[1]} {line[2]}\n")
+
+def transform_toc_file(toc_path: str, is_add_indent: bool = True, is_remove_trailing_dots: bool = True, add_offset: int = 0, output_path: str = None):
+    if output_path is None:
+        p = Path(toc_path)
+        output_path = str(p.parent / f"{p.stem}-toc-transform.txt")
+    with open(toc_path, "r") as f, open(output_path, "w") as f2:
+        for line in f:
+            new_line = line
+            if is_remove_trailing_dots:
+                new_line = re.sub("(\.\s*)+(?=\d*\s*$)", " ", new_line)
+                new_line = new_line.rstrip() + "\n"
+            if is_add_indent:
+                res = title_preprocess(new_line)
+                new_line = (res['level']-1)*'\t' + res['text'].rstrip() + "\n"
+            if add_offset:
+                m = re.search("(\d+)(?=\s*$)", new_line)
+                if m is not None:
+                    pno = int(m.group(1))
+                    pno = pno + add_offset
+                    new_line = new_line[:m.span()[0]-1] + f" {pno}\n"
+            f2.write(new_line)

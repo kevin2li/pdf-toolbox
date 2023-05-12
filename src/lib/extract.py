@@ -55,7 +55,6 @@ def extract_images_from_pdf(doc_path: str, page_range: str = 'all', output_dir: 
             pix = None
 
 
-
 def extract_text_from_pdf(doc_path: str, output_path: str = None):
     doc = fitz.open(doc_path)  # open document
     if output_path is None:

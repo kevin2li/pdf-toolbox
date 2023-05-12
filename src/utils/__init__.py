@@ -1,3 +1,5 @@
+import cv2
+from paddleocr import PPStructure
 
 
 def ppstructure_analysis(input_path: str):
