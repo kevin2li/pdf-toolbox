@@ -9,8 +9,8 @@ import fitz
 from paddleocr import PaddleOCR, draw_ocr
 from PIL import Image
 
-from src.lib.bookmark import transform_toc_file
-from src.utils import parse_range
+from pdf_toolbox.lib.bookmark import transform_toc_file
+from pdf_toolbox.utils import parse_range
 
 
 def center_y(elem):
@@ -52,7 +52,7 @@ def ocr_from_image(input_path: str, lang: str = 'ch', output_path: str = None, o
     boxes  = [line[0] for line in result]
     txts   = [line[1][0] for line in result]
     scores = [line[1][1] for line in result]
-    im_show = draw_ocr(image, boxes, txts, scores, font_path='src/assets/SIMKAI.TTF')
+    im_show = draw_ocr(image, boxes, txts, scores, font_path='pdf_toolbox/assets/SIMKAI.TTF')
     im_show = Image.fromarray(im_show)
 
     p = Path(input_path)

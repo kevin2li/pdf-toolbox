@@ -9,7 +9,7 @@ import numpy as np
 from paddleocr import PaddleOCR
 from tqdm import tqdm
 
-from src.utils import ppstructure_analysis
+from pdf_toolbox.utils import ppstructure_analysis
 
 
 def title_preprocess(title: str):

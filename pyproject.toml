@@ -1,0 +1,33 @@
+[build-system]
+requires      = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdf-toolbox"
+version = "0.0.1"
+description = "A pdf toolbox to easily handle various pdf operations"
+readme = "README.md"
+authors = [{ name = "Kevin2li", email = "kevin2li@qq.com" }]
+license = { file = "LICENSE" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["pdf", "ocr"]
+dependencies = [
+    "paddleocr>=2.6.1.3",
+    "paddlepaddle>=2.4.2",
+    "PyMuPDF",
+]
+
+requires-python = ">=3.9"
+
+[project.optional-dependencies]
+dev = ["isort", "pip-tools", "pytest"]
+
+[project.urls]
+Homepage = "https://github.com/kevin2li/pdf-toolbox"
+
+[project.scripts]
+realpython = "main:main"

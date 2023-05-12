@@ -6,7 +6,7 @@ import fitz
 from PIL import Image
 from tqdm import tqdm
 
-from src.utils import parse_range, ppstructure_analysis
+from pdf_toolbox.utils import parse_range, ppstructure_analysis
 
 
 def plot_roi_region(input_path, type: str = 'title', output_path: str = None):

@@ -1,6 +1,8 @@
 assets
 pdf
 output
-!src/assets
+!src/pdf_toolbox/assets
 **/*cache*
 test*
+dist/
+*egg-info

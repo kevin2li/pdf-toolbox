@@ -1,0 +1,3 @@
+addleocr==2.6.1.3
+paddlepaddle==2.4.2
+PyMuPDF==1.22.2

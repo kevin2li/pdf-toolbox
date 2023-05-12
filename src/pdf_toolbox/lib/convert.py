@@ -5,7 +5,7 @@ from pathlib import Path
 import fitz
 from tqdm import tqdm
 
-from src.utils import parse_range
+from pdf_toolbox.utils import parse_range
 
 
 def convert_pdf_to_images(doc_path: str, page_range: str = 'all', output_path: str = None):

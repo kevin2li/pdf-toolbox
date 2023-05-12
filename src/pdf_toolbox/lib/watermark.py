@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFont, ImageOps
 
-from src.lib.convert import convert_images_to_pdf
+from pdf_toolbox.lib.convert import convert_images_to_pdf
 
 
 def set_opacity(im, opacity):
@@ -42,7 +42,7 @@ def gen_mark(
     angle           : int = 30,
     color           : str = "#808080",
     opacity         : float=0.15,
-    font_family     : str = "src/assets/SIMKAI.TTF",
+    font_family     : str = "pdf_toolbox/assets/SIMKAI.TTF",
     font_height_crop: str="1.2",
     ): 
     """生成水印图片，返回添加水印的函数

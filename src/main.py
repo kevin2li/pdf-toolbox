@@ -4,21 +4,22 @@ import os
 from pathlib import Path
 from pprint import pprint
 
-from src.lib.basic import (delete_pdf, insert_pdf, merge_pdf, rotate_pdf,split_pdf,
+from pdf_toolbox.lib.basic import (delete_pdf, insert_pdf, merge_pdf, rotate_pdf,split_pdf,
                            slice_pdf)
-from src.lib.bookmark import (add_toc_from_file, add_toc_from_ocr, extract_toc,
+from pdf_toolbox.lib.bookmark import (add_toc_from_file, add_toc_from_ocr, extract_toc,
                               transform_toc_file)
-from src.lib.convert import convert_images_to_pdf, convert_pdf_to_images
-from src.lib.encrypt import decrypt_pdf, encrypt_pdf
-from src.lib.extract import (debug_item_from_pdf, extract_item_from_pdf,
+from pdf_toolbox.lib.convert import convert_images_to_pdf, convert_pdf_to_images
+from pdf_toolbox.lib.encrypt import decrypt_pdf, encrypt_pdf
+from pdf_toolbox.lib.extract import (debug_item_from_pdf, extract_item_from_pdf,
                              extract_text_from_pdf)
-from src.lib.ocr import ocr_from_image, ocr_from_pdf
-from src.lib.watermark import (add_mark_to_image, add_mark_to_pdf,
+from pdf_toolbox.lib.ocr import ocr_from_image, ocr_from_pdf
+from pdf_toolbox.lib.watermark import (add_mark_to_image, add_mark_to_pdf,
                                remove_mark_from_image, remove_mark_from_pdf)
 
-if __name__ == "__main__":
+
+def main():
     parser = argparse.ArgumentParser()
-    
+
     sub_parsers = parser.add_subparsers()
 
     bookmark_parser  = sub_parsers.add_parser("bookmark", help="书签", description="pdf添加书签、提取书签、书签清洗等")
@@ -83,7 +84,7 @@ if __name__ == "__main__":
     watermark_text_group.add_argument("--color", type=str, default="#808080", dest="color", help="水印文本颜色")
     watermark_text_group.add_argument("--opacity", type=float, default=0.15, dest="opacity", help="水印不透明度")
     watermark_text_group.add_argument("--font-height-crop", type=str, default="1.2", dest="font_height_crop")
-    watermark_text_group.add_argument("--font-family", type=str, default="src/assets/SIMKAI.TTF", dest="font_family", help="水印字体路径")
+    watermark_text_group.add_argument("--font-family", type=str, default="pdf_toolbox/assets/SIMKAI.TTF", dest="font_family", help="水印字体路径")
     watermark_text_group.add_argument("--quality", type=int, default=80, dest="quality", help="水印图片保存质量")
     
     watermark_remove_group = watermark_parser.add_argument_group("去除水印")
@@ -256,3 +257,6 @@ if __name__ == "__main__":
         split_pdf(args.input_path, args.pages_per_part, args.output_path)
     elif args.which == "debug":
         debug_item_from_pdf(args.input_path, args.page_range, args.type, args.output_path)
+
+if __name__ == "__main__":
+    main()

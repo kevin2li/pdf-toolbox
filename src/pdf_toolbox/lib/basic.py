@@ -6,7 +6,7 @@ from typing import List
 import fitz
 from tqdm import tqdm
 
-from src.utils import parse_range
+from pdf_toolbox.utils import parse_range
 
 
 def slice_pdf(doc_path: str, page_range: str = "all", is_multiple: bool = False, output_path: str = None):
