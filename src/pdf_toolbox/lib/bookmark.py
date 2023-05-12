@@ -8,41 +8,46 @@ import fitz
 import numpy as np
 from paddleocr import PaddleOCR
 from tqdm import tqdm
-
+import traceback
 from pdf_toolbox.utils import ppstructure_analysis
-
+from loguru import logger
 
 def title_preprocess(title: str):
     """提取标题层级和标题内容
     """
-    title = title.rstrip()
-    res = {}
-    # 匹配：1.1.1 标题
-    m = re.match("\s*((\d+\.?)+)\s*(.+)", title)
-    if m is not None:
-        res['text'] = f"{m.group(1)} {m.group(3)}"
-        res['level'] = len([v for v in m.group(1).split(".") if v])
-        return res
-    
-    # 匹配：第1章 标题
-    m = re.match("\s*(第.+[章|编])\s*(.+)", title)
-    if m is not None:
-        res['text'] = f"{m.group(1)} {m.group(2)}"
-        res['level'] = 1
-        return res
+    try:
+        title = title.rstrip()
+        res = {}
+        # 匹配：1.1.1 标题
+        m = re.match("\s*((\d+\.?)+)\s*(.+)", title)
+        if m is not None:
+            res['text'] = f"{m.group(1)} {m.group(3)}"
+            res['level'] = len([v for v in m.group(1).split(".") if v])
+            return res
+        
+        # 匹配：第1章 标题
+        m = re.match("\s*(第.+[章|编])\s*(.+)", title)
+        if m is not None:
+            res['text'] = f"{m.group(1)} {m.group(2)}"
+            res['level'] = 1
+            return res
 
-    # 匹配：第1节 标题
-    m = re.match("\s*(第.+节)\s*(.+)", title)
-    if m is not None:
-        res['text'] = f"{m.group(1)} {m.group(2)}"
-        res['level'] = 2
+        # 匹配：第1节 标题
+        m = re.match("\s*(第.+节)\s*(.+)", title)
+        if m is not None:
+            res['text'] = f"{m.group(1)} {m.group(2)}"
+            res['level'] = 2
+            return res
+        
+        # 根据缩进匹配
+        m = re.match("(\t*)\s*(.+)", title)
+        res['text'] = f"{m.group(2)}".rstrip()
+        res['level'] = len(m.group(1))+1
         return res
-    
-    # 根据缩进匹配
-    m = re.match("(\t*)\s*(.+)", title)
-    res['text'] = f"{m.group(2)}".rstrip()
-    res['level'] = len(m.group(1))+1
-    return res
+    except:
+        logger.error(f"error for title: {title}")
+        traceback.print_exc()
+        return {'level': 1, "text": title}
 
 def extract_title(input_path: str, lang: str = 'ch', use_double_columns: bool = False) -> list:
     # TODO: 存在标题识别不全bug
@@ -122,13 +127,17 @@ def add_toc_from_file(toc_path: str, doc_path: str, offset: int, output_path: st
     toc = []
     with open(toc_path, "r", encoding="utf-8") as f:
         for line in f:
-            parts = line.split()
             pno = 1
-            m = re.search("(\d+)(?=\s*$)", line)
+            title = line
+            m = re.search("(\d+)(?=\s*$)", line) # 把最右侧的数字当作页码，如果解析的数字超过pdf总页数，就从左边依次删直到小于pdf总页数为止
             if m is not None:
                 pno = int(m.group(1))
+                while pno > doc.page_count:
+                    pno = int(str(pno)[1:])
+                title = line[:m.span()[0]]
             pno = pno + offset
-            title = " ".join(map(lambda x: x.strip(), parts[:-1]))
+            if not title.strip(): # 标题为空跳过
+                continue
             res = title_preprocess(title)
             level, title = res['level'], res['text']
             toc.append([level, title, pno])
@@ -139,6 +148,8 @@ def add_toc_from_file(toc_path: str, doc_path: str, offset: int, output_path: st
     indices = np.where(diff>1)[0]
     for idx in indices:
         toc[idx][0] = toc[idx+1][0]
+
+    logger.debug(toc)
 
     doc.set_toc(toc)
     if output_path is None:
