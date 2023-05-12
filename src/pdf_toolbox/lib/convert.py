@@ -24,7 +24,7 @@ def convert_pdf_to_images(doc_path: str, page_range: str = 'all', output_path: s
     for page_index in roi_indices: # iterate over pdf pages
         page = doc[page_index] # get the page
         pix = page.get_pixmap()  # render page to an image
-        savepath = str(output_dir / f"page-{page.number}.png")
+        savepath = str(output_dir / f"page-{page.number+1}.png")
         # pix.save(savepath)  # store image as a PNG
         pix.pil_save(savepath, quality=100, dpi=(1800,1800))
 

@@ -60,7 +60,7 @@ def extract_text_from_pdf(doc_path: str, output_path: str = None):
     if output_path is None:
         p = Path(doc_path)
         output_path = p.parent / f'{p.stem}-text.txt'
-    with open(output_path, "wb") as f:  # open text output
+    with open(output_path, "wb", encoding="utf-8") as f:  # open text output
         for page in doc:  # iterate the document pages
             text = page.get_text().encode("utf8")  # get plain text (is in UTF-8)
             f.write(text)  # write text of page
@@ -83,7 +83,7 @@ def extract_item_from_pdf(doc_path: str, page_range: str = 'all', type: str = "f
     for page_index in tqdm(roi_indices, total=len(roi_indices)):
         page = doc[page_index] # get the page
         pix = page.get_pixmap()  # render page to an image
-        savepath = str(tmp_dir / f"page-{page.number}.png")
+        savepath = str(tmp_dir / f"page-{page.number+1}.png")
         # pix.save(savepath)  # store image as a PNG
         pix.pil_save(savepath, quality=100, dpi=(1800,1800))
         result = ppstructure_analysis(savepath)
@@ -92,7 +92,7 @@ def extract_item_from_pdf(doc_path: str, page_range: str = 'all', type: str = "f
         idx = 1
         for item in result:
             im_show = Image.fromarray(item['img'])
-            im_show.save(str(output_dir / f"page-{page.number}-{type}-{idx}.png"))
+            im_show.save(str(output_dir / f"page-{page.number+1}-{type}-{idx}.png"))
             idx += 1
 
 
@@ -113,7 +113,7 @@ def debug_item_from_pdf(doc_path: str, page_range: str = 'all', type: str = "fig
     for page_index in tqdm(roi_indices, total=len(roi_indices)):
         page = doc[page_index] # get the page
         pix = page.get_pixmap()  # render page to an image
-        savepath = str(tmp_dir / f"page-{page.number}.png")
+        savepath = str(tmp_dir / f"page-{page.number+1}.png")
         # pix.save(savepath)  # store image as a PNG
         pix.pil_save(savepath, quality=100, dpi=(1800,1800))
         plot_roi_region(savepath, type, str(output_dir / f"page-{page.number+1}-{type}.png"))

@@ -1,13 +1,12 @@
 import glob
-import re
 import shutil
 from pathlib import Path
-from pprint import pprint
 
 import cv2
 import fitz
 from paddleocr import PaddleOCR, draw_ocr
 from PIL import Image
+from tqdm import tqdm
 
 from pdf_toolbox.lib.bookmark import transform_toc_file
 from pdf_toolbox.utils import parse_range
@@ -34,7 +33,7 @@ def write_ocr_result(ocr_results, output_path: str, offset: int = 5):
     # 将最后一行的元素添加到结果列表中
     temp_row = sorted(temp_row, key=lambda x: x[0][0])
     results.append(temp_row)
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         for row in results:
             line = ""
             for item in row:
@@ -52,7 +51,8 @@ def ocr_from_image(input_path: str, lang: str = 'ch', output_path: str = None, o
     boxes  = [line[0] for line in result]
     txts   = [line[1][0] for line in result]
     scores = [line[1][1] for line in result]
-    im_show = draw_ocr(image, boxes, txts, scores, font_path='pdf_toolbox/assets/SIMKAI.TTF')
+    fontpath = str((Path(__file__).parent.parent / "assets" / "SIMKAI.TTF").absolute())
+    im_show = draw_ocr(image, boxes, txts, scores, font_path=fontpath)
     im_show = Image.fromarray(im_show)
 
     p = Path(input_path)
@@ -80,23 +80,19 @@ def ocr_from_pdf(doc_path: str, page_range: str = 'all', lang: str = 'ch', outpu
         roi_indices = list(range(len(doc)))
     else:
         roi_indices = parse_range(page_range)
-    for page_index in roi_indices: # iterate over pdf pages
+    for page_index in tqdm(roi_indices): # iterate over pdf pages
         page = doc[page_index] # get the page
         pix: fitz.Pixmap = page.get_pixmap()  # render page to an image
-        savepath = str(tmp_dir / f"page-{page.number}.png")
+        savepath = str(tmp_dir / f"page-{page.number+1}.png")
         pix.pil_save(savepath, quality=100, dpi=(1800,1800))
         ocr_from_image(savepath, lang, output_path=str(output_path), offset=offset)
-    print("output_path:", output_path)
-    import time
-    time.sleep(1)
     path_list = glob.glob(str(output_path / "*.txt"))
     merged_path = output_path / "merged.txt"
-    with open(merged_path, "a") as f:
+    with open(merged_path, "a", encoding="utf-8") as f:
         for path in path_list:
-            with open(path, "r") as f2:
+            with open(path, "r", encoding="utf-8") as f2:
                 for line in f2:
                     f.write(line)
-                    print(line)
     shutil.rmtree(tmp_dir)
 
 if __name__ == "__main__":

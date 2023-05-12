@@ -84,11 +84,9 @@ def add_toc_from_ocr(doc_path: str, lang: str='ch', use_double_columns: bool = F
     toc = []
     for page in tqdm(doc, total=doc.page_count):
         pix: fitz.Pixmap = page.get_pixmap()  # render page to an image
-        savepath = str(tmp_dir / f"page-{page.number}.png")
+        savepath = str(tmp_dir / f"page-{page.number+1}.png")
         # pix.save(savepath)  # store image as a PNG
         pix.pil_save(savepath, quality=100, dpi=(1800,1800))
-
-        # plot_roi_region(savepath, output_path=str(tmp_dir / f"plot-page-{page.number}.png"))
         result = extract_title(savepath, lang, use_double_columns)
         for item in result:
             pos, (title, prob) = item
@@ -123,7 +121,7 @@ def add_toc_from_file(toc_path: str, doc_path: str, offset: int, output_path: st
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
     toc = []
-    with open(toc_path, "r") as f:
+    with open(toc_path, "r", encoding="utf-8") as f:
         for line in f:
             parts = line.split()
             pno = 1
@@ -154,7 +152,7 @@ def extract_toc(doc_path: str, output_path: str = None):
     out = doc.get_toc()
     if output_path is None:
         output_path = str(p.parent / f"{p.stem}-[toc].txt")
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         for line in out:
             indent = (line[0]-1)*"\t"
             f.writelines(f"{indent}{line[1]} {line[2]}\n")
@@ -163,7 +161,7 @@ def transform_toc_file(toc_path: str, is_add_indent: bool = True, is_remove_trai
     if output_path is None:
         p = Path(toc_path)
         output_path = str(p.parent / f"{p.stem}-toc-transform.txt")
-    with open(toc_path, "r") as f, open(output_path, "w") as f2:
+    with open(toc_path, "r", encoding="utf-8") as f, open(output_path, "w", encoding="utf-8") as f2:
         for line in f:
             new_line = line
             if is_remove_trailing_dots:

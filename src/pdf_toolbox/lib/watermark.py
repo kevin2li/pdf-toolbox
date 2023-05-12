@@ -12,6 +12,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageEnhance, ImageFont, ImageOps
 
 from pdf_toolbox.lib.convert import convert_images_to_pdf
 
+fontpath = str((Path(__file__).parent.parent / "assets" / "SIMKAI.TTF").absolute())
 
 def set_opacity(im, opacity):
     '''
@@ -42,7 +43,7 @@ def gen_mark(
     angle           : int = 30,
     color           : str = "#808080",
     opacity         : float=0.15,
-    font_family     : str = "pdf_toolbox/assets/SIMKAI.TTF",
+    font_family     : str = fontpath,
     font_height_crop: str="1.2",
     ): 
     """生成水印图片，返回添加水印的函数
@@ -206,7 +207,7 @@ def remove_mark_from_pdf(doc_path: str, water_mark_color: Union[str, Tuple[int, 
         for pos in product(range(pix.width), range(pix.height)):
             if sum(pix.pixel(pos[0], pos[1])) >= threshold:
                 pix.set_pixel(pos[0], pos[1], (255, 255, 255))
-        savepath = tmp_dir / f"{page.number}.png"
+        savepath = tmp_dir / f"{page.number+1}.png"
         pix.pil_save(savepath, quality=100, dpi=(page.rect[3], page.rect[2]))
 
     if output_path is None:
