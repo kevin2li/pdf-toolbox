@@ -30,4 +30,4 @@ dev = ["isort", "pip-tools", "pytest"]
 Homepage = "https://github.com/kevin2li/pdf-toolbox"
 
 [project.scripts]
-realpython = "main:main"
+pdf_toolboox = "pdf_toolbox.__main__:main"
