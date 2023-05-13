@@ -1,7 +1,7 @@
 assets
 pdf
 output
-!src/pdf_toolbox/assets
+!pdf_toolbox/assets
 **/*cache*
 test*
 dist/

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pdf-toolbox"
-version = "0.0.2"
+version = "0.0.3"
 description = "A pdf toolbox to easily handle various pdf operations"
 readme = "README.md"
 authors = [{ name = "Kevin2li", email = "kevin2li@qq.com" }]
@@ -23,6 +23,12 @@ dependencies = [
 ]
 
 requires-python = ">=3.9"
+
+[tool.setuptools]
+packages = ["pdf_toolbox", "pdf_toolbox.lib", "pdf_toolbox.utils"]
+
+[tool.setuptools.package-data]
+pdf_toolbox = ["assets/*.TTF"]
 
 [project.optional-dependencies]
 dev = ["isort", "pip-tools", "pytest"]
