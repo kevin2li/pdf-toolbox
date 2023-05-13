@@ -8,37 +8,50 @@ pip install pdf-toolbox
 ## 用法
 ### 书签管理
 #### 添加书签
-##### 从目录文件中导入  
-假设你有一个类似下面格式的目录文件(例如从网上书城复制目录文本等)，你可以使用下面命令导入目录：  
-> 每行的格式要求：|{标题} {页码}|  
-> 即：每行的最后的数字会被解释为页码，页码前面的部分都会被当作标题内容(首尾可以包含空白符，程序后面会自动清除)，内容与页码之间用空格隔开
 
-![](https://minio.kevin2li.top/image-bed/vanblog/img/10a971312aeb6dd55681414f8826429d.image.png)
+##### 有目录： 从文件导入
 
+命令示例：  
 ```bash
-pdf_toolbox bookmark add -t file --toc-file {toc_file_path} --offset {offset} -o {output_path} {pdf_path}
+pdf_toolbox bookmark add from_file -t {toc_file_path} -d {offset} -o {output_path} {pdf_path}
 ```
+###### 目录来自网上渠道
+适用场景：书籍类
+方法：从网上书城找到目标书籍，一般详情页会提供目录，拷贝到本地文件再导入
 
-##### 从ocr中自动识别 
+###### 目录来自原始文件
+适用场景：扫描件
+方法：从原始文件(pdf、word等)提取目录，保存到本地再导入
 
+
+###### 目录来自pdf本身
+适用场景：pdf自身含有目录页
+方法：用ocr识别目录文字，保存到本地再导入
+
+
+##### 无目录：用ocr识别标题自动生成
+方法：用ocr遍历每页找到标题并记录页码，自动生成目录
+
+命令示例：  
 ```bash
 # 单栏pdf
-pdf_toolbox bookmark add -t ocr -l ch -o {output_path} {pdf_path}
+pdf_toolbox bookmark add from_ocr -l ch -o {output_path} {pdf_path}
 
 # 双栏pdf
-pdf_toolbox bookmark add -t ocr -l ch -d -o {output_path} {pdf_path}
+pdf_toolbox bookmark add from_ocr -l ch -d -o {output_path} {pdf_path}
 ```
 
-#### 提取书签 
+#### 提取目录书签 
 
 除了自动提取目录外，本工具还支持将**已有目录**的pdf文件的目录导出为txt文件，命令如下：
 
 ```bash
+# 提取为txt文件
 pdf_toolbox bookmark extract -o {toc_path} {pdf_path}
-```
 
-导出的目录txt文件类似如下：  
-![](https://minio.kevin2li.top/image-bed/202305102236751.png)
+# 提取为json文件(可以保留高度信息)
+pdf_toolbox bookmark extract -f json -o {toc_path} {pdf_path}
+```
 
 #### 书签文件清洗
 ```bash

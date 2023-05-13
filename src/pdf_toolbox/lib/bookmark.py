@@ -167,7 +167,6 @@ def extract_toc(doc_path: str, format: str = "txt", output_path: str = None):
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
     toc = doc.get_toc(simple=False)
-    logger.debug(toc[0][-1]['to'])
     if format == "txt":
         if output_path is None:
             output_path = str(p.parent / f"{p.stem}-toc.txt")
