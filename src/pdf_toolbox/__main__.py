@@ -49,7 +49,6 @@ def main():
 
     from_ocr_parser.add_argument("-l", "--lang", type=str, default="ch", choices=['ch', 'en', 'fr', 'german', 'it', 'japan', 'korean', 'ru', 'chinese_cht'], dest="lang", help="pdf语言")
     from_ocr_parser.add_argument("-d", "--double-columns", action="store_true", dest='use_double_column', default=False, help="是否双栏")
-    from_ocr_parser.add_argument("-f", "--overwrite", action="store_true", dest='is_overwrite', default=False, help="是否覆盖原文件(指定此项将忽略output_path)")
     from_ocr_parser.add_argument("-r", "--range", type=str, default="all", dest="page_range", help="指定页面范围,例如: '1-3,7-19'")
     from_ocr_parser.add_argument("input_path", type=str, help="输入文件路径")
     from_ocr_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
@@ -57,7 +56,6 @@ def main():
 
     from_file_parser.add_argument("-t", "--toc-file", type=str,default=None, dest='toc_path', help="目录文件路径")
     from_file_parser.add_argument("-d", "--offset", type=int, default=0, dest="offset", help="偏移量, 默认为0，计算方式：实际页码-标注页码")
-    from_file_parser.add_argument("-f", "--overwrite", action="store_true", dest='is_overwrite', default=False, help="是否覆盖原文件(指定此项将忽略output_path)")
     from_file_parser.add_argument("input_path", type=str, help="输入文件路径")
     from_file_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
     from_file_parser.set_defaults(bookmark_add_which='file')
@@ -77,6 +75,7 @@ def main():
     ## 书签提取
     bookmark_extract_parser.add_argument("input_path", type=str, help="输入文件路径")
     bookmark_extract_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    bookmark_extract_parser.add_argument("-f", "--format", type=str, default="txt", choices=["txt", "json"], dest="format", help="保存格式(json格式可保留高度信息)")
     bookmark_extract_parser.set_defaults(bookmark_which='extract')
 
     bookmark_parser.set_defaults(which='bookmark')
@@ -196,15 +195,13 @@ def main():
     if args.which == "bookmark":
         if args.bookmark_which == "add":
             if args.bookmark_add_which == 'ocr':
-                output_path = args.input_path if args.is_overwrite else args.output_path
-                add_toc_from_ocr(args.input_path, lang=args.lang, use_double_columns=args.use_double_column, output_path=output_path)
+                add_toc_from_ocr(args.input_path, lang=args.lang, use_double_columns=args.use_double_column, output_path=args.output_path)
             elif args.bookmark_add_which == 'file':
-                output_path = args.input_path if args.is_overwrite else args.output_path
-                add_toc_from_file(args.toc_path, args.input_path, offset=args.offset, output_path=output_path)
+                add_toc_from_file(args.toc_path, args.input_path, offset=args.offset, output_path=args.output_path)
         elif args.bookmark_which == "clean":
             transform_toc_file(args.input_path, args.is_add_indent, args.is_remove_trailing_dots, args.add_offset, args.output_path)
         elif args.bookmark_which == "extract":
-            extract_toc(args.input_path, args.output_path)
+            extract_toc(args.input_path, args.format, args.output_path)
     elif args.which == "merge":
         if len(args.input_path) == 1:
             path_list = glob.glob(os.path.join(args.input_path[0], "*.pdf"))

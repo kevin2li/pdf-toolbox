@@ -1,16 +1,19 @@
 import glob
+import json
 import re
 import shutil
+import traceback
 from pathlib import Path
 
 import cv2
 import fitz
 import numpy as np
+from loguru import logger
 from paddleocr import PaddleOCR
 from tqdm import tqdm
-import traceback
+
 from pdf_toolbox.utils import ppstructure_analysis
-from loguru import logger
+
 
 def title_preprocess(title: str):
     """提取标题层级和标题内容
@@ -124,24 +127,30 @@ def add_toc_from_file(toc_path: str, doc_path: str, offset: int, output_path: st
     """
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
+    toc_path = Path(toc_path)
     toc = []
-    with open(toc_path, "r", encoding="utf-8") as f:
-        for line in f:
-            pno = 1
-            title = line
-            m = re.search("(\d+)(?=\s*$)", line) # 把最右侧的数字当作页码，如果解析的数字超过pdf总页数，就从左边依次删直到小于pdf总页数为止
-            if m is not None:
-                pno = int(m.group(1))
-                while pno > doc.page_count:
-                    pno = int(str(pno)[1:])
-                title = line[:m.span()[0]]
-            pno = pno + offset
-            if not title.strip(): # 标题为空跳过
-                continue
-            res = title_preprocess(title)
-            level, title = res['level'], res['text']
-            toc.append([level, title, pno])
-    
+    if toc_path.suffix == ".txt":
+        with open(toc_path, "r", encoding="utf-8") as f:
+            for line in f:
+                pno = 1
+                title = line
+                m = re.search("(\d+)(?=\s*$)", line) # 把最右侧的数字当作页码，如果解析的数字超过pdf总页数，就从左边依次删直到小于pdf总页数为止
+                if m is not None:
+                    pno = int(m.group(1))
+                    while pno > doc.page_count:
+                        pno = int(str(pno)[1:])
+                    title = line[:m.span()[0]]
+                pno = pno + offset
+                if not title.strip(): # 标题为空跳过
+                    continue
+                res = title_preprocess(title)
+                level, title = res['level'], res['text']
+                toc.append([level, title, pno])
+    elif toc_path.suffix == ".json":
+        with open(toc_path, "r", encoding="utf-8") as f:
+            toc = json.load(f)
+    else:
+        raise ValueError("不支持的toc文件格式!")
     # 校正层级
     levels = [v[0] for v in toc]
     diff = np.diff(levels)
@@ -149,23 +158,33 @@ def add_toc_from_file(toc_path: str, doc_path: str, offset: int, output_path: st
     for idx in indices:
         toc[idx][0] = toc[idx+1][0]
 
-    logger.debug(toc)
-
     doc.set_toc(toc)
     if output_path is None:
         output_path = str(p.parent / f"{p.stem}-toc.pdf")
     doc.save(output_path)
 
-def extract_toc(doc_path: str, output_path: str = None):
+def extract_toc(doc_path: str, format: str = "txt", output_path: str = None):
     doc: fitz.Document = fitz.open(doc_path)
     p = Path(doc_path)
-    out = doc.get_toc()
-    if output_path is None:
-        output_path = str(p.parent / f"{p.stem}-toc.txt")
-    with open(output_path, "w", encoding="utf-8") as f:
-        for line in out:
-            indent = (line[0]-1)*"\t"
-            f.writelines(f"{indent}{line[1]} {line[2]}\n")
+    toc = doc.get_toc(simple=False)
+    logger.debug(toc[0][-1]['to'])
+    if format == "txt":
+        if output_path is None:
+            output_path = str(p.parent / f"{p.stem}-toc.txt")
+        with open(output_path, "w", encoding="utf-8") as f:
+            for line in toc:
+                indent = (line[0]-1)*"\t"
+                f.writelines(f"{indent}{line[1]} {line[2]}\n")
+    elif format == "json":
+        if output_path is None:
+            output_path = str(p.parent / f"{p.stem}-toc.json")
+        for i in range(len(toc)):
+            try:
+                toc[i][-1] = toc[i][-1]['to'].y
+            except:
+                toc[i][-1] = 0
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(toc, f)
 
 def transform_toc_file(toc_path: str, is_add_indent: bool = True, is_remove_trailing_dots: bool = True, add_offset: int = 0, output_path: str = None):
     if output_path is None:
