@@ -2,34 +2,38 @@
 ## 安装
 ### 使用pip
 ```bash
-pip install pdf-toolbox
+pip install git+https://github.com/kevin2li/pdf-toolbox.git
+
+# or 使用国内镜像源
+pip install git+https://github.com/kevin2li/pdf-toolbox.git -i https://mirrors.aliyun.com/pypi/simple
 ```
 
 ## 用法
 ### 书签管理
 #### 添加书签
 
-##### 有目录： 从文件导入
+**有目录**
 
 命令示例：  
 ```bash
 pdf_toolbox bookmark add from_file -t {toc_file_path} -d {offset} -o {output_path} {pdf_path}
 ```
-###### 目录来自网上渠道
-适用场景：书籍类
+
+1. 目录来自网上渠道  
+适用场景：书籍类  
 方法：从网上书城找到目标书籍，一般详情页会提供目录，拷贝到本地文件再导入
 
-###### 目录来自原始文件
-适用场景：扫描件
+1. 目录来自原始文件  
+适用场景：扫描件  
 方法：从原始文件(pdf、word等)提取目录，保存到本地再导入
 
 
-###### 目录来自pdf本身
-适用场景：pdf自身含有目录页
+3. 目录来自pdf本身  
+适用场景：pdf自身含有目录页  
 方法：用ocr识别目录文字，保存到本地再导入
 
 
-##### 无目录：用ocr识别标题自动生成
+**无目录**  
 方法：用ocr遍历每页找到标题并记录页码，自动生成目录
 
 命令示例：  
