@@ -8,6 +8,13 @@ pip install git+https://github.com/kevin2li/pdf-toolbox.git
 pip install git+https://github.com/kevin2li/pdf-toolbox.git -i https://mirrors.aliyun.com/pypi/simple
 ```
 
+### 使用docker
+```bash
+docker pull kevin2li/pdf-toolbox
+
+# 使用(切到目标pdf所在文件夹打开终端，以切片为例)
+docker run --rm -v ${PWD}:/data kevin2li/pdf-toolbox slice -r 1-10 /data/xxx.pdf
+```
 ## 用法
 ### 书签管理
 #### 添加书签

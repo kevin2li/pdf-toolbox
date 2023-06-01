@@ -1,5 +1,4 @@
-FROM paddlecloud/paddleocr:2.6-cpu-latest
-WORKDIR /app
-COPY . /app
-RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt
-CMD ["python3", "src/pdf_toolbox/__main__.py"]
+FROM python:3.10
+RUN apt update && apt install ffmpeg libsm6 libxext6 -y && pip install git+https://github.com/kevin2li/pdf-toolbox.git
+WORKDIR /data
+ENTRYPOINT [ "pdf_toolbox" ]
