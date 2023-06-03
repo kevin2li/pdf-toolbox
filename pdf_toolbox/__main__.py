@@ -139,6 +139,7 @@ def main():
 
     # 合并
     merge_parser.add_argument("-o", "--output", type=str, default=None, dest="output_path", help="结果保存路径")
+    merge_parser.add_argument("-f", "--config", action="store_true", dest='config', default=False, help="是否将input_path作为配置文件(每行一个pdf文件路径)")
     merge_parser.add_argument("input_path", type=str, nargs="+", default=None, help="输入文件路径或目录")
     merge_parser.set_defaults(which='merge')
 
@@ -203,10 +204,14 @@ def main():
         elif args.bookmark_which == "extract":
             extract_toc(args.input_path, args.format, args.output_path)
     elif args.which == "merge":
-        if len(args.input_path) == 1:
-            path_list = glob.glob(os.path.join(args.input_path[0], "*.pdf"))
+        if args.config:
+            with open(args.input_path, "r", encoding="utf-8") as f:
+                path_list = [line.replace("\n", "") for line in f.readlines()]
         else:
-            path_list = args.input_path
+            if len(args.input_path) == 1:
+                path_list = glob.glob(os.path.join(args.input_path[0], "*.pdf"))
+            else:
+                path_list = args.input_path
         merge_pdf(path_list, args.output_path)
     elif args.which == "insert":
         insert_pdf(args.input_path1, args.input_path2, args.pos, args.output_path)
