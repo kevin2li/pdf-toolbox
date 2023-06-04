@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pdf-toolbox"
-version = "0.0.3"
+version = "0.0.4"
 description = "A pdf toolbox to easily handle various pdf operations"
 readme = "README.md"
 authors = [{ name = "Kevin2li", email = "kevin2li@qq.com" }]

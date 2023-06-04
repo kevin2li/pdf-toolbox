@@ -205,7 +205,7 @@ def main():
             extract_toc(args.input_path, args.format, args.output_path)
     elif args.which == "merge":
         if args.config:
-            with open(args.input_path, "r", encoding="utf-8") as f:
+            with open(args.input_path[0], "r", encoding="utf-8") as f:
                 path_list = [line.replace("\n", "") for line in f.readlines()]
         else:
             if len(args.input_path) == 1:

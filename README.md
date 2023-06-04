@@ -18,14 +18,6 @@ docker run --rm -v ${PWD}:/data kevin2li/pdf-toolbox slice -r 1-10 /data/xxx.pdf
 ## 用法
 ### 书签管理
 #### 添加书签
-
-**有目录**
-
-命令示例：  
-```bash
-pdf_toolbox bookmark add from_file -t {toc_file_path} -d {offset} -o {output_path} {pdf_path}
-```
-
 1. 目录来自网上渠道  
 适用场景：书籍类  
 方法：从网上书城找到目标书籍，一般详情页会提供目录，拷贝到本地文件再导入
@@ -38,6 +30,17 @@ pdf_toolbox bookmark add from_file -t {toc_file_path} -d {offset} -o {output_pat
 3. 目录来自pdf本身  
 适用场景：pdf自身含有目录页  
 方法：用ocr识别目录文字，保存到本地再导入
+
+**有目录**
+
+页码文件格式如下：(通过缩进控制层级，每行最后标注页码)
+
+![](https://minio.kevin2li.top/image-bed/blog/20230604094627.png)
+
+命令示例：  
+```bash
+pdf_toolbox bookmark add from_file -t {toc_file_path} -d {offset} -o {output_path} {pdf_path}
+```
 
 
 **无目录**  
@@ -86,6 +89,9 @@ pdf_toolbox a.pdf b.pdf -o merged.pdf
 
 # 将指定目录下的pdf文件合并成1个文件
 pdf_toolbox path_to_pdf_dir/ -o merged.pdf
+
+# 按照配置文件顺序合并文件(每行一个pdf文件路径)
+pdf_toolbox -f seq.txt -o merged.pdf
 ```
 ### pdf拆分
 ```bash
